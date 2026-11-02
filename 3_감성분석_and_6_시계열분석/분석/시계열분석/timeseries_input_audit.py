@@ -85,7 +85,7 @@ def main():
 
     raw_inventory = {
         "dataset_role": "raw_review",
-        "file_path": RAW_REVIEW_CSV,
+        "file_path": os.path.relpath(RAW_REVIEW_CSV, PROJECT_ROOT),
         "row_count": raw_rows,
         "place_column": "place",
         "platform_column": "platform",
@@ -146,7 +146,7 @@ def main():
 
     sentiment_inventory = {
         "dataset_role": "final_sentiment",
-        "file_path": SENTIMENT_FINAL_CSV,
+        "file_path": os.path.relpath(SENTIMENT_FINAL_CSV, PROJECT_ROOT),
         "row_count": len(df_sent_final),
         "place_column": "place",
         "platform_column": "platform",
@@ -160,7 +160,7 @@ def main():
         "date_parse_fail_count": sent_parse_fail,
         "link_key_to_raw": "raw.reviewId = sentiment.review_id",
         "link_relationship": "1:N (1개 원본 리뷰 -> N개 감성 문장)",
-        "notes": f"MD5={sent_final_md5}, 최종혼합해소본(5,793행), 원본문장본(5,685행: {SENTIMENT_5685_CSV}), 긍정/중립/부정 3분류"
+        "notes": f"MD5={sent_final_md5}, 최종혼합해소본(5,793행), 원본문장본(5,685행: {os.path.relpath(SENTIMENT_5685_CSV, PROJECT_ROOT)}), 긍정/중립/부정 3분류"
     }
 
     # --------------------------------------------------------------------------
