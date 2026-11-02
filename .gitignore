@@ -218,3 +218,28 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# ── Imsil 프로젝트 ─────────────────────────────────────────
+# 비밀값·로그인 세션: 절대 커밋 금지
+.env.*
+!.env.example
+chrome_profile_google/
+diagnostics/
+
+# 작성자 닉네임·ID가 포함된 수집 원본: 절대 커밋 금지
+1_데이터수집/네이버/output/
+1_데이터수집/구글/output/
+*_raw.json
+*_naver_reviews.csv
+*_google_reviews.csv
+*_google_reviews.xlsx
+
+# 내부 보고서·제출 묶음
+*.hwp
+*.hwpx
+*.docx
+*.zip
+
+# OS·로컬 환경
+.DS_Store
+.plot_deps/

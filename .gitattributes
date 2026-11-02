@@ -1,0 +1,6 @@
+# 데이터는 줄바꿈 변환 없이 바이트 그대로 보존한다 (재현 결과 대조용)
+*.csv   -text
+*.jsonl -text
+*.txt   -text
+*.xlsx  binary
+*.png   binary
