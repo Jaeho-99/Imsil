@@ -1,0 +1,4 @@
+﻿period,review_count,sentence_count,positive_count,neutral_count,negative_count,positive_pct,neutral_pct,negative_pct,avg_sentences_per_review,google_sentence_count,naver_sentence_count,google_sentence_pct,naver_sentence_pct
+pre,37,78,40,13,25,51.28,16.67,32.05,2.11,34,44,43.59,56.41
+festival,49,132,62,26,44,46.97,19.7,33.33,2.69,109,23,82.58,17.42
+post,105,228,117,54,57,51.32,23.68,25.0,2.17,146,82,64.04,35.96
