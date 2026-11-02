@@ -1,0 +1,3 @@
+region,channel,query,count,period,source,collected_at
+임실,blog,임실 여행,0,2022-01~2026-10,네이버 블로그 검색 결과 수,2026-11-09
+전주,blog,전주 여행,0,2022-01~2026-10,네이버 블로그 검색 결과 수,2026-11-09

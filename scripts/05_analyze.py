@@ -1,8 +1,14 @@
-"""[분석] 수집 원본 → 최종 분석 데이터셋·표 (data/processed/online_buzz/<스냅샷>/).
+"""[분석] 원본 → 최종 분석 데이터셋·표 (data/processed/online_buzz/<스냅샷 또는 manual_YYYYMMDD>/).
 
 있는 원본만 분석하고 없는 단계는 건너뛴다. 실행: python scripts/05_analyze.py [--snapshot YYYYMMDD]
 
-산출물
+기본 경로는 웹에서 직접 내려받은 파일(data/manual/, 형식은 data/manual/README.md)이며 결과는 M_ 로 시작한다.
+  M_datalab_long.csv, M_datalab_index_anchor-<그룹>.csv, M_datalab_yearly/seasonality/peaks_*.csv   데이터랩
+  M_google_interest_over_time.csv, M_google_related_queries.csv                                   Google Trends
+  M_mention_share.csv                   언급 건수 표 → 시군별 비중
+  M_posts_region_mention_share.csv, M_K_*.csv, M_R_*.csv   게시물 텍스트 → 시군 언급률, 키워드, 연관관계
+
+아래는 API 로 수집한 스냅샷(scripts/01~04, 선택)이 있을 때의 산출물이다.
   A_mention_totals.csv          시군별 누적 언급량·비중(지표 A)
   B_posting_rate.csv            시군별 최근 게시 속도(지표 B)
   C_jeonbuk_mention_share.csv   전북 관광 게시물 내 시군 언급 비중(지표 C), C_imsil_co_regions.csv
@@ -31,6 +37,7 @@ from imsil_buzz.analysis import association as AS
 from imsil_buzz.analysis import keywords as KW
 from imsil_buzz.analysis import mentions as M
 from imsil_buzz.analysis import trends as T
+from imsil_buzz import manual as MN
 from imsil_buzz.google_trends import load_manual_csv
 from imsil_buzz.snapshot import latest_snapshot
 from imsil_buzz.settings import RAW_DIR, PROCESSED_DIR, MANUAL_DIR
@@ -42,6 +49,70 @@ def save(df: pd.DataFrame, out: Path, name: str, index: bool = False) -> None:
     print(f"  {name:38s} {len(df):>6} rows")
 
 
+IMSIL_PATTERN = "임실|옥정호|붕어섬|성수산|오수|사선대"
+
+
+def analyze_posts(posts: pd.DataFrame, out: Path, prefix: str) -> None:
+    """임실 관련 게시물 키워드 빈도·TF-IDF·연관규칙·네트워크. prefix 로 API/수동 결과를 구분."""
+    posts = posts.drop_duplicates("link")
+    posts = posts[posts["title"].str.contains(IMSIL_PATTERN, na=False)
+                  | posts["description"].str.contains(IMSIL_PATTERN, na=False)]
+    if posts.empty:
+        print("  (임실 관련 게시물 없음 → 키워드 분석 생략)")
+        return
+    tok = KW.tokenize_frame(posts, stopwords={"임실", "임실군"})
+    tok.drop(columns=["text"]).to_json(out / f"{prefix}imsil_posts_tokens.jsonl", orient="records", lines=True, force_ascii=False)
+    save(KW.frequency(tok["tokens"], 50), out, f"{prefix}K_post_frequency.csv")
+    save(KW.doc_frequency(tok["tokens"].tolist(), 50), out, f"{prefix}K_post_docfreq.csv")
+    save(pd.concat({ch: KW.doc_frequency(g["tokens"].tolist(), 30) for ch, g in tok.groupby("channel")}),
+         out, f"{prefix}K_post_docfreq_by_channel.csv", index=True)
+    dated = tok.dropna(subset=["date"]).assign(year=lambda x: x["date"].astype(str).str[:4])
+    if not dated.empty:
+        save(KW.tfidf_by_group(dated, "year"), out, f"{prefix}K_post_tfidf_by_year.csv")
+    save(AS.pair_rules(tok["tokens"].tolist()), out, f"{prefix}R_rules.csv")
+    edges = AS.cooccurrence_edges(tok["tokens"].tolist())
+    save(edges, out, f"{prefix}R_edges.csv")
+    save(AS.centrality(edges), out, f"{prefix}R_centrality.csv")
+
+
+def analyze_manual(out: Path) -> None:
+    """data/manual/ 의 웹 다운로드 파일 분석. 결과 파일명은 M_ 로 시작한다."""
+    # 네이버 데이터랩
+    dl = [MN.load_datalab_export(f).assign(request_id=f.name) for f in MN.datalab_files(MANUAL_DIR / "naver_datalab")]
+    if dl:
+        long = pd.concat(dl, ignore_index=True)
+        save(long, out, "M_datalab_long.csv")
+        # 파일명에 anchor=그룹명 이 있는 파일끼리는 같은 척도로 맞춘다
+        for anchor in sorted({MN.anchor_from_filename(f) for f in long["request_id"].unique()} - {None}):
+            sub = long[long["request_id"].map(MN.anchor_from_filename) == anchor]
+            rel = T.chain_by_anchor(sub, anchor)
+            tag = anchor.replace(" ", "")
+            save(rel, out, f"M_datalab_index_anchor-{tag}.csv")
+            if rel["period"].dt.day.eq(1).all():  # 월 단위일 때만 연도·계절성
+                save(T.yearly_summary(rel), out, f"M_datalab_yearly_anchor-{tag}.csv", index=True)
+                save(T.seasonality(rel), out, f"M_datalab_seasonality_anchor-{tag}.csv", index=True)
+            save(T.peak_months(rel), out, f"M_datalab_peaks_anchor-{tag}.csv")
+    # Google Trends
+    gdir = MANUAL_DIR / "google_trends"
+    timeline = [f for f in sorted(gdir.glob("*.csv")) if "related" not in f.name.lower() and "관련" not in f.name]
+    related = [f for f in sorted(gdir.glob("*.csv")) if f not in timeline]
+    if timeline:
+        save(pd.concat(load_manual_csv(m) for m in timeline), out, "M_google_interest_over_time.csv")
+    if related:
+        save(pd.concat(MN.load_google_related(m) for m in related), out, "M_google_related_queries.csv")
+    # 언급 건수 · 게시물 텍스트
+    mdir = MANUAL_DIR / "mentions"
+    mc = MN.load_mention_counts(mdir)
+    if not mc.empty:
+        save(M.share_table(mc.rename(columns={"count": "total"})), out,
+             "M_mention_share.csv", index=True)
+    posts = MN.load_posts(mdir)
+    if not posts.empty:
+        share = M.regional_mention_share(posts, S.JEONBUK_REGIONS)
+        save(share, out, "M_posts_region_mention_share.csv", index=True)
+        analyze_posts(posts, out, "M_")
+
+
 def load_datalab(path: Path) -> pd.DataFrame:
     reqs = json.loads(path.read_text(encoding="utf-8"))
     return T.concat(T.datalab_to_long(r["response"], r["request_id"]) for r in reqs)
@@ -51,8 +122,15 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--snapshot")
     a = ap.parse_args()
-    raw = RAW_DIR / a.snapshot if a.snapshot else latest_snapshot()
-    out = PROCESSED_DIR / raw.name
+    # API 스냅샷이 없으면(수동 CSV만 쓰는 경우) 빈 폴더로 두고 data/manual/ 만 분석한다
+    if a.snapshot:
+        raw = RAW_DIR / a.snapshot
+    else:
+        try:
+            raw = latest_snapshot()
+        except FileNotFoundError:
+            raw = RAW_DIR / "_none"
+    out = PROCESSED_DIR / (raw.name if raw.exists() else "manual_" + pd.Timestamp.today().strftime("%Y%m%d"))
     out.mkdir(parents=True, exist_ok=True)
     print("raw:", raw, "\nout:", out)
 
@@ -118,29 +196,14 @@ def main() -> None:
 
     # ---------------- 게시물 키워드 · 연관관계
     if (p := raw / "naver_imsil_posts.jsonl").exists():
-        posts = pd.DataFrame(read_jsonl(p)).drop_duplicates("link")
-        posts = posts[posts["title"].str.contains("임실|옥정호|붕어섬|성수산|오수|사선대", na=False)
-                      | posts["description"].str.contains("임실|옥정호|붕어섬|성수산|오수|사선대", na=False)]
-        tok = KW.tokenize_frame(posts, stopwords={"임실", "임실군"})
-        tok.drop(columns=["text"]).to_json(out / "imsil_posts_tokens.jsonl", orient="records", lines=True, force_ascii=False)
-        save(KW.frequency(tok["tokens"], 50), out, "K_post_frequency.csv")
-        save(KW.doc_frequency(tok["tokens"].tolist(), 50), out, "K_post_docfreq.csv")
-        save(pd.concat({ch: KW.doc_frequency(g["tokens"].tolist(), 30) for ch, g in tok.groupby("channel")}),
-             out, "K_post_docfreq_by_channel.csv", index=True)
-        dated = tok.dropna(subset=["date"]).assign(year=lambda x: x["date"].str[:4])
-        if not dated.empty:
-            save(KW.tfidf_by_group(dated, "year"), out, "K_post_tfidf_by_year.csv")
-        save(AS.pair_rules(tok["tokens"].tolist()), out, "R_rules.csv")
-        edges = AS.cooccurrence_edges(tok["tokens"].tolist())
-        save(edges, out, "R_edges.csv")
-        save(AS.centrality(edges), out, "R_centrality.csv")
+        analyze_posts(pd.DataFrame(read_jsonl(p)), out, "")
+
+    # ---------------- 수동 다운로드 파일 (data/manual/)
+    analyze_manual(out)
 
     # ---------------- Google Trends
     for gp in sorted(raw.glob("google_*.csv")):
         save(pd.read_csv(gp), out, "G_" + gp.name[len("google_"):])
-    manual = sorted((MANUAL_DIR / "google_trends").glob("*.csv"))
-    if manual:
-        save(pd.concat(load_manual_csv(m) for m in manual), out, "G_manual_interest_over_time.csv")
 
 
 if __name__ == "__main__":
