@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>라벨링 지침서 · 임실군 관광지 리뷰 감성 검증셋</title>
+<link rel="stylesheet" href="../assets/lesson.css">
+<style>
+  .flow { counter-reset: step; margin: 0 0 1.4rem; }
+  .flow .step {
+    counter-increment: step; position: relative;
+    border: 1px solid var(--rule); border-radius: 4px; background:#fff;
+    padding: .7rem .9rem .7rem 2.8rem; margin-bottom: .5rem; font-size: .93rem;
+  }
+  .flow .step::before {
+    content: counter(step); position: absolute; left: .8rem; top: .7rem;
+    width: 1.4rem; height: 1.4rem; border-radius: 50%;
+    background: var(--ink); color: var(--paper);
+    font-size: .78rem; font-weight: 700; text-align: center; line-height: 1.4rem;
+  }
+  .flow .step b { display:block; margin-bottom:.15rem; }
+  .cases td:first-child { white-space: nowrap; }
+  .ex { font-size:.88rem; color: var(--ink-soft); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<p class="kicker">Reference · 검증셋</p>
+<h1>라벨링 지침서</h1>
+<p class="dek">임실군 관광지 리뷰 감성 검증셋 · 문장 단위 3분류. 라벨링 세션을 시작할 때마다 이 문서를 먼저 읽는다.</p>
+
+<div class="meta">
+  <span>확정 2026-08-20</span>
+  <span>근거: 별점은 감성이 아니다 (분석 단위 결정 근거)</span>
+  <span>라벨러: 1인 단독</span>
+</div>
+
+<h2>한 장 요약</h2>
+
+<table>
+  <thead><tr><th>항목</th><th>확정 내용</th></tr></thead>
+  <tbody>
+    <tr><td><strong>표본</strong></td><td>리뷰 300건 &rarr; 그 안의 문장 전부 (약 530개)</td></tr>
+    <tr><td><strong>단위</strong></td><td>문장 1개 = 라벨 1개</td></tr>
+    <tr><td><strong>라벨</strong></td><td><span class="tag pos">긍정</span> <span class="tag neg">부정</span> <span class="tag neu">중립</span> &mdash; 3분류. &lsquo;혼합&rsquo;은 쓰지 않는다</td></tr>
+    <tr><td><strong>별점</strong></td><td>라벨링 파일에서 <strong>제거</strong>. 라벨링이 끝난 뒤 <code>reviewId</code>로 다시 붙인다</td></tr>
+    <tr><td><strong>추가 컬럼</strong></td><td><code>is_boilerplate</code> (상투어 여부) · <code>is_split</code> (규칙 1-1로 쪼갠 문장) · <code>hold</code> (보류)</td></tr>
+    <tr><td><strong>신뢰도</strong></td><td>완료 하루 뒤 무작위 50문장 재라벨 &rarr; Cohen&rsquo;s &kappa;</td></tr>
+  </tbody>
+</table>
+
+<h2>판정 순서 &mdash; 위에서부터 차례로</h2>
+
+<div class="flow">
+  <div class="step"><b>문장을 쪼갤지 먼저 정한다</b>
+  한 문장 안에 <strong>명시적 긍정과 명시적 부정이 둘 다</strong> 있으면 그 자리에서 절로 나눈다(<code>is_split=True</code>).
+  <span class="ex">&lsquo;-지만/-으나&rsquo;가 있다는 이유만으로는 쪼개지 않는다. 한쪽이 사실 진술이면 그대로 둔다.</span></div>
+
+  <div class="step"><b>평가어가 있는가</b>
+  없으면 &rarr; <span class="tag neu">중립</span>. 여기서 멈춘다. 작성자의 속마음을 추론하지 않는다.</div>
+
+  <div class="step"><b>평가의 방향은</b>
+  좋다는 쪽 &rarr; <span class="tag pos">긍정</span> · 나쁘다는 쪽 &rarr; <span class="tag neg">부정</span>.
+  <span class="ex">강도는 보지 않는다. &ldquo;조금 아쉽네요&rdquo;도 부정이다.</span></div>
+
+  <div class="step"><b>상투어인지 표시한다</b>
+  &ldquo;좋아요/굿/최고&rdquo; 등 <strong>내용 없는 감성 표현 단독</strong>이면 <span class="tag pos">긍정</span> + <code>is_boilerplate=True</code>.</div>
+
+  <div class="step"><b>두 번 읽어도 안 정해지면 보류</b>
+  <code>hold=True</code>로 두고 넘어간다. 300건을 다 끝낸 뒤 보류만 모아서 <strong>한 번에</strong> 처리한다.
+  <span class="ex">그 자리에서 정하면 같은 유형이 서로 다르게 처리된다.</span></div>
+</div>
+
+<h2>경계 사례 사전</h2>
+
+<p>아래는 <strong>이미 결정된</strong> 사항이다. 라벨링 중에 다시 고민하지 않는다.</p>
+
+<table class="cases">
+  <thead><tr><th>유형</th><th>판정</th><th>실제 예시 · 근거</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>헛걸음<br>(못 들어감)</td>
+      <td><span class="tag neg">부정</span></td>
+      <td>&ldquo;토요일 방문 했는데 문 닫고 운영 안해서 &hellip; 화장실 이용만 하다 왔네요&rdquo;<br>
+      <span class="ex">본인의 <strong>좌절된 방문 경험</strong>이 서술되어 있다. 운영·안내의 실패는 개선 대상이다.</span></td>
+    </tr>
+    <tr>
+      <td>개선 요구<br>(&minus;면 좋겠다)</td>
+      <td><span class="tag neg">부정</span></td>
+      <td>&ldquo;주차장도 빨리 포장 공사 됐음 좋겠어요&rdquo; / &ldquo;관리에 좀 더 신경써주면 좋겠습니다&rdquo;<br>
+      <span class="ex"><strong>지금 없는 것을 요구하고 있는가</strong>가 판별 질문. 결핍이 텍스트에 쓰여 있으므로 추론이 아니다.<br>
+      &middot; 재방문 의사(&ldquo;봄에 다시 오겠음&rdquo;) &rarr; 긍정 &nbsp;&middot; 관광지 평가가 아닌 소망(&ldquo;많이 놀러오시길&rdquo;) &rarr; 중립<br>
+      &middot; 사전 기반 방식이 이 유형 34건을 <strong>한 건도 못 잡는다</strong>(&lsquo;좋&rsquo;에 걸려 긍정으로 감). 사람 라벨의 가치가 가장 큰 구간.</span></td>
+    </tr>
+    <tr>
+      <td>이중부정</td>
+      <td>의미대로</td>
+      <td>&ldquo;나쁘지 않아요&rdquo; / &ldquo;편의시설도 부족함이 없어요&rdquo; &rarr; <span class="tag pos">긍정</span><br>
+      <span class="ex">부정 단어가 들어 있어도 문장의 뜻이 긍정이면 긍정. 단어가 아니라 문장을 읽는다.</span></td>
+    </tr>
+    <tr>
+      <td>운영 정보만</td>
+      <td><span class="tag neu">중립</span></td>
+      <td>&ldquo;월요일은 쉬어요&rdquo; / &ldquo;3월까지 이용할 수 없음&rdquo;<br>
+      <span class="ex">본인 경험이 아니라 정보 전달이다. 위 항목과의 차이는 <em>좌절된 방문이 서술되었는가</em>.</span></td>
+    </tr>
+    <tr>
+      <td>사실 + 평가</td>
+      <td>평가 쪽</td>
+      <td>&ldquo;입장료 3000원이지만 돈이 아깝지 않았어요!&rdquo; &rarr; <span class="tag pos">긍정</span> (쪼개지 않음)<br>
+      &ldquo;입장료가 비싸요&rdquo; &rarr; <span class="tag neg">부정</span><br>
+      <span class="ex">가격이 언급됐는지가 아니라 <strong>평가가 붙었는지</strong>를 본다.</span></td>
+    </tr>
+    <tr>
+      <td>약한 부정</td>
+      <td><span class="tag neg">부정</span></td>
+      <td>&ldquo;그린이 조금 아쉽네요&rdquo;<br><span class="ex">3분류는 방향만 본다. 강도로 나누기 시작하면 기준이 흔들린다.</span></td>
+    </tr>
+    <tr>
+      <td>내용 없음</td>
+      <td><span class="tag neu">중립</span></td>
+      <td>&ldquo;붕어섬출렁다리&rdquo; / &ldquo;따뜻한 아메리카노가&rdquo;<br>
+      <span class="ex">장소명·조각 문장. 전체 문장의 13%가 5자 미만이라 자주 나온다. 버리지 않는다.</span></td>
+    </tr>
+    <tr>
+      <td>전언·인용</td>
+      <td><span class="tag neu">중립</span></td>
+      <td>&ldquo;치즈돈까스가 그렇게 맛있다고해서 먹어봄&rdquo;<br><span class="ex">남의 평가이고 본인 평가가 없다.</span></td>
+    </tr>
+    <tr>
+      <td>별점과 어긋남</td>
+      <td>텍스트 기준</td>
+      <td>별점 1점 + 완전 긍정 텍스트(국립 임실호국원) &rarr; <span class="tag pos">긍정</span><br>
+      <span class="ex">애초에 라벨링 파일에 별점이 없어야 한다.</span></td>
+    </tr>
+    <tr>
+      <td>외국어 리뷰</td>
+      <td>동일 기준</td>
+      <td>&ldquo;There is nothing to do but take pictures&hellip;&rdquo;<br>
+      <span class="ex">한국어와 같은 규칙을 적용하고 <code>lang</code> 컬럼에 표시해 둔다.</span></td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>상투어로 볼 표현</h2>
+<p class="ex">아래 표현<strong>만</strong>으로 이루어진 문장일 때 <code>is_boilerplate=True</code>. 뒤에 구체적 내용이 붙으면 상투어가 아니다.</p>
+<div class="callout">
+<p>좋아요 · 좋습니다 · 좋네요 · 좋았어요 · 넘좋아요 · 너무좋아요 · 아주좋아요 · 완전 좋아요 ·
+조아요 · 좋아용 · 굿 · 굳 · 굿굿 · 최고 · 만족합니다 · 멋져요 · 괜찮아요</p>
+</div>
+
+<h2>작업 절차</h2>
+<ol>
+  <li><strong>순서를 무작위로 섞은 파일</strong>로 작업한다. 관광지·플랫폼별로 정렬된 파일을 쓰지 않는다.</li>
+  <li><strong>2&ndash;3회 세션</strong>으로 나누고, 세션 시작 때마다 이 문서를 다시 읽는다.</li>
+  <li>보류를 모아서 일괄 처리한다.</li>
+  <li><strong>처음 50문장을 마지막에 다시 검토</strong>한다(기준이 굳기 전에 매긴 라벨).</li>
+  <li>하루 뒤, 무작위 50문장을 이전 라벨을 <strong>보지 않고</strong> 다시 라벨 &rarr; Cohen&rsquo;s &kappa; 계산.</li>
+</ol>
+
+<div class="callout warn">
+<p><strong>이 지침을 바꿔야 할 상황이 오면</strong> &mdash; 라벨링을 멈추고 이 문서를 먼저 고친 뒤, 그 조항이 걸리는 이전 문항을 되돌아가 맞춘다.
+문서를 안 고치고 판단만 바꾸면 앞뒤 300건의 기준이 달라지고, 재라벨 &kappa;가 그 사실을 그대로 드러낸다.</p>
+</div>
+
+<div class="footer">
+<p>이 지침서는 검증 자료 라벨링에 실제로 사용한 판정 기준이다. 라벨링 절차와 확정 결과는 <code>labeling/</code> 폴더의 스크립트와 <code>labeling/확정/</code> 자료를 참고한다.</p>
+<p class="ex">개정 이력 &mdash; 2026-08-20 최초 확정 · 2026-08-20 &lsquo;개선 요구&rsquo;와 &lsquo;이중부정&rsquo; 항목 추가(3강 2절 실측 근거).
+xlsx 파일의 &lsquo;지침요약&rsquo; 시트도 함께 갱신되었다 &mdash; <strong>2026-08-20 03:50 이후 받은 파일이면 최신이다.</strong></p>
+</div>
+
+</div>
+</body>
+</html>
