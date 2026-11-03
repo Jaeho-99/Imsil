@@ -77,6 +77,9 @@ TARGETS = [
         "feature_id": "0x356fd7ba9e08fc69:0x26115af9b51d3f84",
         "query": "임실치즈테마파크",
     },
+    # 추가 분석 2개소 (2026-11, 7_추가관광지분석/). feature_id 는 --resolve 로 확정해 넣는다.
+    {"name": "성수산", "feature_id": None, "query": "임실 성수산"},
+    {"name": "오수의견국민여가캠핑장", "feature_id": None, "query": "오수의견 국민여가캠핑장"},
     # {"name": "옥정호출렁다리", "feature_id": None, "query": "옥정호 출렁다리"},
     # {"name": "국사봉전망대",   "feature_id": None, "query": "임실 국사봉전망대"},
 ]
