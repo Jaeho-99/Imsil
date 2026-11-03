@@ -42,7 +42,7 @@ copy .env.example .env                                        # ANTHROPIC_API_KE
 
 ### 0단계 — 수집 (네이버·구글에 접속되는 PC에서)
 
-1. **네이버 장소 ID**: 네이버 지도에서 장소를 열고 URL의 `/place/{숫자}`를 `config.py`의 `naver_place_id`에 넣습니다.
+1. **네이버 장소 ID**: `config.py`의 `naver_place_id`에 넣어 두었습니다 (성수산 13491702, 오수의견국민여가캠핑장 2006533162). 네이버 수집기는 2026-11에 바뀐 API에 맞춰 고쳤습니다(`userIdno` 필드 삭제, 새 헤더 추가).
 2. **구글 장소 확인**: `1_데이터수집/구글/`에서 `python google_reviews.py --resolve "임실 성수산" "오수의견 국민여가캠핑장"`으로 `feature_id`를 확인해 `google_reviews.py`의 `TARGETS`(추가 2곳 항목)에 넣습니다.
 3. 수집:
 

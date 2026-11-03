@@ -5,7 +5,7 @@
 모든 스크립트(scripts/*.py)가 이 파일을 읽으므로 값을 바꾸면 전 단계에 같이 반영된다.
 
 수집 전에 채워야 하는 값
-  - TARGETS[*]["naver_place_id"] : 네이버 지도 URL의 /place/{숫자} 부분
+  - TARGETS[*]["naver_place_id"] : 네이버 지도 URL의 /place/{숫자} 부분 (2026-11-03 입력 완료)
   - 구글 장소는 1_데이터수집/구글/google_reviews.py 의 TARGETS 에 있다 (같은 이름으로 등록)
 수집 후에 고정해야 하는 값
   - DATE_END : 수집일 전날로 고정한다. 34개소 분석(2026-08-10)과 같은 방식이다.
@@ -29,13 +29,13 @@ DEMO_SOURCES = {"성수산": "사선대관광지", "오수의견국민여가캠�
 TARGETS = [
     {
         "name": "성수산",
-        "naver_place_id": None,          # TODO: 수집 전에 채운다
+        "naver_place_id": "13491702",      # m.place.naver.com/place/13491702
         # 키워드 분석에서 관광지명 자체를 빼는 불용어 (34개소 노트북의 place_specific_stopwords 방식)
         "place_stopwords": {"성수산", "임실"},
     },
     {
         "name": "오수의견국민여가캠핑장",
-        "naver_place_id": None,          # TODO: 수집 전에 채운다
+        "naver_place_id": "2006533162",    # m.place.naver.com/place/2006533162
         "place_stopwords": {"오수", "의견", "오수의견", "국민여가", "캠핑장",
                             "국민여가캠핑장", "임실"},
     },

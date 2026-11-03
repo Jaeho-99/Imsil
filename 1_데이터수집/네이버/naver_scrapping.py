@@ -6,17 +6,27 @@ PHASE 2 헤더 이등분 실험 결과 반영 (2026-08 검증)
   - sec-ch-ua*, sec-fetch-*, priority 필수 → 없으면 405 (봇 차단)
   - size 상한: 50 OK / 100 은 null 반환
 
+2026-11 수정 (네이버 쪽 변경 대응)
+  - QUERY 에서 `userIdno` 필드 삭제 → 스키마에서 빠져 400 GRAPHQL_VALIDATION_FAILED 의 원인
+  - 요청 헤더에 origin·referer·x-wtm-graphql(장소 ID를 담은 base64 JSON) 추가,
+    Client Hints 를 Chrome 152 / Windows 값으로 갱신
+  - cidList 추출 실패 대비: CID_OVERRIDE 에 브라우저에서 확인한 값을 넣을 수 있다
+  - 명령행에 장소 ID 를 주면 그 장소만 수집
+
 사용법
   PLACE_IDS 에 수집할 장소 ID를 넣고 실행.
   장소 ID는 지도 URL의 /place/{숫자} 부분.
 
-    python naver_scrapping.py
+    python naver_scrapping.py                       # PLACE_IDS 전체
+    python naver_scrapping.py 13491702 2006533162   # 지정한 장소만
 """
 
+import base64
 import csv
 import json
 import random
 import re
+import sys
 import time
 from pathlib import Path
 
@@ -57,7 +67,9 @@ PLACE_IDS = [
     # "",           # 31.섬진강자전거길인증센터 -> 네이버 플레이스에 없음.
     "17658791",     # 32.관촌시장
     "17659891",     # 33.강진공용버스터미널
-    "1753061067"    # 34.옥정호전망대
+    "1753061067",   # 34.옥정호전망대
+    "13491702",     # 35.성수산 (2026-11 추가)
+    "2006533162",   # 36.오수의견국민여가캠핑장 (2026-11 추가)
 ]
 
 # place_id → 관광지명 (파일명/place_name 컬럼에 사용)
@@ -94,6 +106,14 @@ PLACE_NAMES = {
     "17658791": "관촌시장",
     "17659891": "강진공용버스터미널",
     "1753061067": "옥정호전망대",
+    "13491702": "성수산",
+    "2006533162": "오수의견국민여가캠핑장",
+}
+
+# HTML 에서 cidList 를 못 찾을 때 쓸 값. 브라우저 개발자도구 Network 탭의
+# getVisitorReviews 요청 Payload 에 있는 "cidList" 를 그대로 옮긴다.
+CID_OVERRIDE = {
+    "13491702": ["222117", "222118", "222132"],   # 성수산 (2026-11-03 확인)
 }
 
 OUT_DIR = Path("output")
@@ -112,16 +132,16 @@ HEADERS = {
     "accept-language": "ko",
     "content-type": "application/json",
     "priority": "u=1, i",
-    "sec-ch-ua": '"Google Chrome";v="149", "Chromium";v="149", "Not)A;Brand";v="24"',
+    "sec-ch-ua": '"Chromium";v="152", "Not?A_Brand";v="24", "Google Chrome";v="152"',
     "sec-ch-ua-mobile": "?0",
-    "sec-ch-ua-platform": '"macOS"',
+    "sec-ch-ua-platform": '"Windows"',
     "sec-fetch-dest": "empty",
     "sec-fetch-mode": "cors",
     "sec-fetch-site": "same-site",
     "user-agent": (
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
         "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/149.0.0.0 Safari/537.36"
+        "Chrome/152.0.0.0 Safari/537.36"
     ),
 }
 
@@ -146,7 +166,6 @@ QUERY = """query getVisitorReviews($input: VisitorReviewsInput) {
       language
       businessName
       votedKeywords { code iconCode name __typename }
-      userIdno
       nickname
       visitCategories { code name keywords { code name __typename } __typename }
       representativeVisitDateTime
@@ -168,9 +187,13 @@ def fetch_place_meta(session: requests.Session, place_id: str) -> dict:
         if r.status_code != 200:
             return meta
         html = r.text
-        m = re.search(r'"defaultCategoryCodeList"\s*:\s*(\[[^\]]*\])', html)
-        if m:
-            meta["cid_list"] = json.loads(m.group(1))
+        for key in ("defaultCategoryCodeList", "categoryCodeList", "cidList"):
+            m = re.search(r'"%s"\s*:\s*(\[[^\]]*\])' % key, html)
+            if m:
+                cids = [str(x) for x in json.loads(m.group(1))]
+                if cids:
+                    meta["cid_list"] = cids
+                    break
         m = re.search(r'id="og:title"[^>]*content="([^"]+)"', html)
         if m:
             meta["name"] = m.group(1).replace(" : 네이버", "").strip()
@@ -200,12 +223,24 @@ def build_payload(place_id, cid_list, size, after):
              "variables": {"input": inp}, "query": QUERY}]
 
 
+def place_headers(place_id):
+    """장소마다 달라지는 헤더. 브라우저가 보내는 값과 같은 형식."""
+    h = dict(HEADERS)
+    h["origin"] = "https://m.place.naver.com"
+    h["referer"] = f"https://m.place.naver.com/place/{place_id}/review/visitor"
+    h["x-wtm-graphql"] = base64.urlsafe_b64encode(json.dumps(
+        {"arg": str(place_id), "type": "place", "source": "place"},
+        separators=(",", ":")).encode()).decode().rstrip("=")
+    return h
+
+
 def request(session, place_id, cid_list, size, after):
     """(result_or_None, message). 429는 백오프 후 재시도."""
+    msg = ""
     for attempt in range(1, MAX_RETRY + 1):
         try:
             r = session.post(
-                ENDPOINT, headers=HEADERS,
+                ENDPOINT, headers=place_headers(place_id),
                 json=build_payload(place_id, cid_list, size, after),
                 timeout=20, allow_redirects=False,
             )
@@ -248,9 +283,10 @@ def request(session, place_id, cid_list, size, after):
 def crawl_place(session, place_id):
     meta = fetch_place_meta(session, place_id)
     name = PLACE_NAMES.get(place_id) or meta["name"] or place_id
-    cid_list = meta["cid_list"]
+    cid_list = meta["cid_list"] or CID_OVERRIDE.get(place_id, [])
     print(f"\n▶ {name}  ({place_id})")
-    print(f"  cidList: {cid_list or '추출 실패 — 빈 값으로 진행'}")
+    src = "HTML" if meta["cid_list"] else ("CID_OVERRIDE" if cid_list else "")
+    print(f"  cidList: {f'{cid_list} ({src})' if cid_list else '추출 실패 — 빈 값으로 진행'}")
 
     reviews, seen = [], set()
     after, total, cursor = None, None, None
@@ -327,8 +363,9 @@ def main():
     session = requests.Session()
     summary = []
 
-    for i, pid in enumerate(PLACE_IDS, 1):
-        print(f"\n{'=' * 58}\n[{i}/{len(PLACE_IDS)}]")
+    targets = sys.argv[1:] or PLACE_IDS
+    for i, pid in enumerate(targets, 1):
+        print(f"\n{'=' * 58}\n[{i}/{len(targets)}]")
         try:
             result = crawl_place(session, pid)
         except KeyboardInterrupt:
@@ -345,7 +382,7 @@ def main():
         summary.append((pid, result["name"], n, result["total"], body_n, ok))
         print(f"  저장: output/naver/{result['name']}_naver_reviews.csv  ({ok})")
 
-        if i < len(PLACE_IDS):
+        if i < len(targets):
             time.sleep(random.uniform(*PLACE_SLEEP))
 
     print(f"\n{'=' * 58}\n요약")
