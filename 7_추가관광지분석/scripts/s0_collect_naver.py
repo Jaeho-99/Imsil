@@ -9,7 +9,9 @@
         data/raw/naver/{관광지명}_수집정보.json         (수집 시각 — 연도 없는 날짜 해석용)
 
 실행 (네이버에 접속 가능한 PC에서)
-    python scripts/s0_collect_naver.py
+    python scripts/s0_collect_naver.py                      # config.TARGETS 전체
+    python scripts/s0_collect_naver.py 오수의견국민여가캠핑장   # 이름으로 골라서
+중간에 막히면 받은 데까지 data/raw/{ID}_raw.json 에 남고, 다시 실행하면 이어받는다.
 """
 import json
 import random
@@ -26,8 +28,13 @@ import naver_scrapping as ns  # noqa: E402
 
 
 def main():
-    todo = [t for t in config.TARGETS if t.get("naver_place_id")]
-    missing = [t["name"] for t in config.TARGETS if not t.get("naver_place_id")]
+    pick = set(sys.argv[1:])
+    unknown = pick - set(config.TARGET_NAMES)
+    if unknown:
+        sys.exit(f"config.TARGETS 에 없는 이름: {', '.join(unknown)}")
+    todo = [t for t in config.TARGETS if t.get("naver_place_id") and (not pick or t["name"] in pick)]
+    missing = [t["name"] for t in config.TARGETS
+               if not t.get("naver_place_id") and (not pick or t["name"] in pick)]
     if missing:
         print(f"[경고] naver_place_id 가 비어 있어 건너뜁니다: {', '.join(missing)}")
         print("       config.py 의 TARGETS 에 네이버 지도 URL의 /place/{숫자} 를 넣어 주세요.")
