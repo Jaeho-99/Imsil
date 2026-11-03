@@ -14,6 +14,9 @@ PHASE 2 헤더 이등분 실험 결과 반영 (2026-08 검증)
   - 명령행에 장소 ID 를 주면 그 장소만 수집
   - 숙박·캠핑장처럼 /place/ 가 아닌 업종 페이지(/accommodation/ 등)로 넘어가는 곳은
     BUSINESS_TYPE 에 업종을 적는다. businessType·referer·x-wtm-graphql 에 같이 쓰인다.
+  - 2026-11 부터 405 가 헤더 문제가 아니라 요청 속도 차단으로도 나온다(같은 헤더로 1페이지 성공 후
+    2페이지에서 405). 요청 간격을 늘렸고, 405 를 받으면 그 자리에서 멈추고 저장한다(재시도하지 않음).
+    시간을 두고 다시 실행하면 output/{ID}_raw.json 의 last_cursor 부터 이어받는다.
 
 사용법
   PLACE_IDS 에 수집할 장소 ID를 넣고 실행.
@@ -126,10 +129,12 @@ BUSINESS_TYPE = {
 
 OUT_DIR = Path("output")
 SIZE = 50                  # 검증된 최대치
-SLEEP_RANGE = (1.5, 3.0)   # 페이지 간
-PLACE_SLEEP = (3.0, 5.0)   # 장소 간
+SLEEP_RANGE = (4.0, 8.0)   # 페이지 간 (2026-08: 1.5~3.0 → 2026-11 차단이 잦아 늘림)
+PLACE_SLEEP = (20.0, 40.0) # 장소 간
 MAX_PAGES = 200
 MAX_RETRY = 3
+BLOCK_WAIT = 60            # 429 때 첫 대기(초). 시도마다 배로 늘린다
+RESUME = True              # 이전 실행의 {ID}_raw.json 이 있으면 last_cursor 부터 이어받기
 # ══════════════════════════════════════════════════════════
 
 ENDPOINT = "https://api.place.naver.com/place/graphql"
@@ -263,15 +268,19 @@ def request(session, place_id, cid_list, size, after):
             continue
 
         if r.status_code == 429:
-            wait = 10 * attempt
-            print(f"        429 rate limit — {wait}s 대기 후 재시도 "
-                  f"({attempt}/{MAX_RETRY})")
-            time.sleep(wait)
-            msg = "RATE_LIMIT"
+            msg = "429 — 요청 속도 제한. 시간을 두고 다시 실행하면 이어받습니다."
+            if attempt < MAX_RETRY:
+                wait = BLOCK_WAIT * 2 ** (attempt - 1)
+                print(f"        429 rate limit — {wait}s 대기 후 재시도 "
+                      f"({attempt}/{MAX_RETRY - 1})")
+                time.sleep(wait)
             continue
 
         if r.status_code == 405:
-            return None, "405 — 헤더 부족(봇 차단). HEADERS를 건드리지 마세요."
+            body = re.sub(r"\s+", " ", r.text)[:150]
+            print(f"        응답 405: {body or '(본문 없음)'}")
+            return None, ("405 — 차단 (헤더 부족 또는 요청 속도). "
+                          "시간을 두고 다시 실행하면 이어받습니다.")
 
         if r.status_code != 200:
             return None, f"HTTP {r.status_code}: {r.text[:200]}"
@@ -303,6 +312,22 @@ def crawl_place(session, place_id):
 
     reviews, seen = [], set()
     after, total, cursor = None, None, None
+
+    prev = OUT_DIR / f"{place_id}_raw.json"
+    if RESUME and prev.exists():
+        old = json.loads(prev.read_text(encoding="utf-8"))
+        reviews = old.get("reviews") or []
+        seen = {x["id"] for x in reviews}
+        total = old.get("total")
+        cursor = after = old.get("last_cursor")
+        if total and len(reviews) >= total:
+            print(f"  이전 수집 완료 {len(reviews)}/{total}건 — 건너뜀 "
+                  f"(새로 받으려면 {prev.name} 삭제)")
+            return old
+        if after:
+            print(f"  이전 수집 {len(reviews)}/{total}건에서 이어받기")
+        else:
+            reviews, seen = [], set()
 
     for page in range(1, MAX_PAGES + 1):
         res, msg = request(session, place_id, cid_list, SIZE, after)
