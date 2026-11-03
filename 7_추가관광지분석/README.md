@@ -55,6 +55,8 @@ python google_reviews.py --target 오수의견국민여가캠핑장 --limit 3000
 
 구글은 `--limit`만큼 최신순으로 가져오므로 2022년 리뷰까지 닿도록 넉넉히 줍니다. 결과(`output/{관광지}_google_reviews.csv`)는 1단계가 자동으로 찾습니다. 수집기 사용법과 주의 사항은 [구글 수집기 README](../1_데이터수집/구글/README.md)에 있습니다.
 
+네이버 수집기가 캡차·405로 막히면 몇 시간 뒤 같은 명령을 다시 실행합니다. 받은 데까지 `data/raw/{ID}_raw.json`에 남아 있어 이어받습니다. 계속 막히면 브라우저에서 리뷰 탭을 직접 넘겨 본 뒤 개발자도구 Network 탭에서 HAR(sanitized)로 내보내고 `python scripts/s0_import_har.py {파일.har}`로 합칩니다.
+
 4. 수집이 끝나면 `config.py`의 `DATE_END`를 수집일 전날로 고정합니다.
 
 ### 1~7단계 — 분석
