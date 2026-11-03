@@ -12,6 +12,8 @@ PHASE 2 헤더 이등분 실험 결과 반영 (2026-08 검증)
     Client Hints 를 Chrome 152 / Windows 값으로 갱신
   - cidList 추출 실패 대비: CID_OVERRIDE 에 브라우저에서 확인한 값을 넣을 수 있다
   - 명령행에 장소 ID 를 주면 그 장소만 수집
+  - 숙박·캠핑장처럼 /place/ 가 아닌 업종 페이지(/accommodation/ 등)로 넘어가는 곳은
+    BUSINESS_TYPE 에 업종을 적는다. businessType·referer·x-wtm-graphql 에 같이 쓰인다.
 
 사용법
   PLACE_IDS 에 수집할 장소 ID를 넣고 실행.
@@ -116,6 +118,12 @@ CID_OVERRIDE = {
     "13491702": ["222117", "222118", "222132"],   # 성수산 (2026-11-03 확인)
 }
 
+# 업종이 'place' 가 아닌 장소. 브라우저에서 m.place.naver.com/place/{ID} 를 열었을 때
+# 넘어가는 주소의 업종 부분(예: /accommodation/{ID}/home)을 적는다.
+BUSINESS_TYPE = {
+    "2006533162": "accommodation",   # 오수의견국민여가캠핑장 (캠핑장, 객실예약)
+}
+
 OUT_DIR = Path("output")
 SIZE = 50                  # 검증된 최대치
 SLEEP_RANGE = (1.5, 3.0)   # 페이지 간
@@ -179,7 +187,7 @@ QUERY = """query getVisitorReviews($input: VisitorReviewsInput) {
 
 def fetch_place_meta(session: requests.Session, place_id: str) -> dict:
     """장소 HTML에서 이름과 cidList 추출. 실패해도 수집은 진행."""
-    url = f"https://m.place.naver.com/place/{place_id}/review/visitor"
+    url = f"https://m.place.naver.com/{btype(place_id)}/{place_id}/review/visitor"
     meta = {"name": None, "cid_list": []}
     try:
         r = session.get(url, headers={"user-agent": HEADERS["user-agent"]},
@@ -202,10 +210,14 @@ def fetch_place_meta(session: requests.Session, place_id: str) -> dict:
     return meta
 
 
+def btype(place_id):
+    return BUSINESS_TYPE.get(str(place_id), "place")
+
+
 def build_payload(place_id, cid_list, size, after):
     inp = {
         "businessId": place_id,
-        "businessType": "place",
+        "businessType": btype(place_id),
         "item": "0",
         "bookingBusinessId": None,
         "size": size,
@@ -227,9 +239,10 @@ def place_headers(place_id):
     """장소마다 달라지는 헤더. 브라우저가 보내는 값과 같은 형식."""
     h = dict(HEADERS)
     h["origin"] = "https://m.place.naver.com"
-    h["referer"] = f"https://m.place.naver.com/place/{place_id}/review/visitor"
+    t = btype(place_id)
+    h["referer"] = f"https://m.place.naver.com/{t}/{place_id}/review/visitor"
     h["x-wtm-graphql"] = base64.urlsafe_b64encode(json.dumps(
-        {"arg": str(place_id), "type": "place", "source": "place"},
+        {"arg": str(place_id), "type": t, "source": "place"},
         separators=(",", ":")).encode()).decode().rstrip("=")
     return h
 
