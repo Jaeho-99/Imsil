@@ -19,6 +19,9 @@
 
 하위 명령 (순서대로)
   build      문장 분리 → output/3_감성/문장목록.csv, input/추가_NN.txt
+             리뷰가 바뀐 뒤(예: 구글 데이터 추가) 다시 build 하면 묶음 구성과 unit_id 가 달라진다.
+             이때 이전 run 결과·검토표·최종 라벨은 지금 문장과 맞지 않으므로
+             data/raw/감성_이전실행/{시각}/ 으로 옮기고(지우지 않음) 다시 분류하게 한다.
   validate   34개소 검증셋 548문장을 API 로 분류·채점 → output/3_감성/검증_34개소/  (API)
   run        묶음을 API 로 분류 → output/3_감성/output/{run1,run2}/                 (API)
   check      출력 완결성 · 2회 불일치율 · κ
@@ -39,6 +42,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import shutil
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -57,6 +61,13 @@ IN_DIR = OUT / "input"
 RUN_DIR = OUT / "output"
 VAL_DIR = OUT / "검증_34개소"
 REVIEW_XLSX = OUT / "사람검토표.xlsx"
+ARCHIVE = config.RAW_DIR / "감성_이전실행"
+# 입력 문장이 바뀌면 함께 무효가 되는 결과들 (build 가 옮긴다)
+STALE_ON_REBUILD = [RUN_DIR / "run1", RUN_DIR / "run2", RUN_DIR / "재현성.json", REVIEW_XLSX,
+                    OUT / "블라인드검증_결과.json", OUT / "전수_문장라벨_최종.csv",
+                    OUT / "전수_리뷰라벨_최종.csv", OUT / "관광지별_문장감성_최종.csv",
+                    OUT / "관광지별_리뷰감성_최종.csv", OUT / "관광지_플랫폼별_문장감성.csv",
+                    OUT / "그림_관광지별_감성구성.png"]
 LABELS = ["긍정", "부정", "중립"]
 CATS = ["긍정", "부정", "중립", "혼합"]
 
@@ -94,9 +105,7 @@ def build(_):
         cur.extend(recs)
     if cur:
         groups.append(cur)
-    IN_DIR.mkdir(parents=True, exist_ok=True)
-    for old in IN_DIR.glob("*.txt"):
-        old.unlink()
+    new = {}
     for i, recs in enumerate(groups, 1):
         lines = [f"# 묶음 추가_{i:02d} · {len(recs)}문장 · 출력도 정확히 {len(recs)}행이어야 합니다.",
                  "unit_id | sent_no/n_sent | 관광지 | 플랫폼 | 문장"]
@@ -104,9 +113,34 @@ def build(_):
             sent = str(r["sent"]).replace("\n", " ").replace("|", "/").strip()
             lines.append(f'{r["unit_id"]} | {r["sent_no"]}/{r["n_sent"]} | '
                          f'{r["place"]} | {r["platform"]} | {sent}')
-        (IN_DIR / f"추가_{i:02d}.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
+        new[f"추가_{i:02d}.txt"] = "\n".join(lines) + "\n"
+    IN_DIR.mkdir(parents=True, exist_ok=True)
+    old = {p.name: p.read_text(encoding="utf-8") for p in IN_DIR.glob("*.txt")}
+    if old and old != new:
+        archive_stale()
+    for p in IN_DIR.glob("*.txt"):
+        p.unlink()
+    for name, text in new.items():
+        (IN_DIR / name).write_text(text, encoding="utf-8")
     ck("문장 분리", len(df) > 0, f"리뷰 {len(t)} → 문장 {len(df)} · 묶음 {len(groups)}")
     print(df.groupby("place").agg(리뷰=("review_id", "nunique"), 문장=("unit_id", "size")).to_string())
+
+
+def archive_stale():
+    """입력 문장이 바뀌었을 때, 이전 문장으로 만든 결과를 옮겨 둔다(지우지 않는다).
+
+    run 은 이미 있는 묶음 출력을 건너뛰므로, 옮기지 않으면 바뀐 묶음에 옛 라벨이 붙는다.
+    """
+    dst = ARCHIVE / datetime.now().strftime("%Y%m%d-%H%M%S")
+    moved = []
+    for p in STALE_ON_REBUILD:
+        if p.exists():
+            dst.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(p), str(dst / p.name))
+            moved.append(p.name)
+    if moved:
+        print(f"  [주의] 입력 문장이 바뀌어 이전 감성 결과 {len(moved)}개({', '.join(moved)})를 "
+              f"{rel(dst)} 로 옮겼습니다.\n         run1·run2 와 review 를 다시 해야 합니다.")
 
 
 # ─────────────────────────────────────────────────────────────
@@ -331,6 +365,14 @@ def merge(_):
 
     hard_done = 0
     if REVIEW_XLSX.exists():
+        cur = dict(zip(src["unit_id"], src["sent"].astype(str).str.strip()))
+        for sheet in ("1_혼합확정", "2_블라인드검증"):
+            s_ = pd.read_excel(REVIEW_XLSX, sheet_name=sheet, dtype=str).fillna("")
+            off = sum(cur.get(u) != t.strip() for u, t in zip(s_["unit_id"], s_["sent"]))
+            ck(f"사람검토표 '{sheet}' 가 지금 문장목록과 맞음", off == 0,
+               f"{len(s_)}행 확인" if off == 0 else
+               f"unit_id 는 같은데 문장이 다른 행 {off}개 — 검토표를 만든 뒤 데이터가 바뀌었습니다. "
+               "검토표를 다른 곳으로 옮기고 review 로 새로 만드세요.")
         h = pd.read_excel(REVIEW_XLSX, sheet_name="1_혼합확정", dtype=str).fillna("")
         h = h[h["최종판정"].str.strip().isin(["긍정", "부정", "중립"])]
         fix = dict(zip(h["unit_id"], h["최종판정"].str.strip()))
