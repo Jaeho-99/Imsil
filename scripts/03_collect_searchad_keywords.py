@@ -35,10 +35,7 @@ def main() -> None:
     pd.DataFrame(rows).to_csv(out / "searchad_related_keywords.csv", index=False, encoding="utf-8-sig")
 
     # 그룹 검색수: 그룹 키워드를 5개씩 hint 로 넣고, 응답 중 hint 와 같은 키워드의 검색수만 합산
-    groups: dict[str, list[str]] = dict(S.IMSIL_TREND_GROUPS)
-    for region in S.JEONBUK_REGIONS:
-        name = S.REGION_QUERY_NAME_OVERRIDE.get(region, region)
-        groups[region] = [t.format(r=name) for t in S.REGION_QUERY_TEMPLATES]
+    groups: dict[str, list[str]] = {**S.REGION_TREND_GROUPS, **S.IMSIL_TREND_GROUPS}
     vol = []
     for g, kws in groups.items():
         want = {k.replace(" ", "") for k in kws}

@@ -12,22 +12,30 @@
    - 온라인 관심 특성과 시사점
 2. 추가 분석 2 — 성수산·오수의견국민여가캠핑장 리뷰 분석 (지난 34개 관광지 분석 코드 재활용, 별도 진행)
 
-## 데이터 흐름 (API 미사용이 기본)
+## 데이터 흐름 (언급량·게시물만 검색 API, 나머지는 웹 다운로드)
 
-연구원이 웹에서 직접 내려받은 파일을 `data/manual/` 에 넣는다. 폴더별 형식과 파일명 규칙은 `data/manual/README.md` 를 따른다.
+2026-11-05 결정: 비용 없이 다시 받을 수 있어야 해서 **언급량과 게시물만 네이버 검색 API**로 받고,
+데이터랩·검색광고 키워드도구·Google Trends 는 웹에서 내려받은 파일을 `data/manual/` 에 넣는다(형식: `data/manual/README.md`).
+수집은 하루(2026-11-07)에 몰아서 하고, 분석은 저장된 원본만 읽는다.
 
 ```
-data/manual/{naver_datalab,google_trends,mentions}/   ← 원본(손대지 않음)
-python scripts/05_analyze.py                          → data/processed/online_buzz/manual_YYYYMMDD/M_*.csv
-pytest -q                                             ← 코드 수정 후 항상 실행
+config/키워드사전_v*.csv                        ← 검색어·별칭·거를 글 (가장 높은 버전을 씀)
+python scripts/00_keyword_check_sheet.py make  → data/manual/keyword_check/확인표_*.csv (사람이 '맞음' 열 표시)
+python scripts/00_keyword_check_sheet.py summarize <확인표>   → 확인결과_*.csv
+python scripts/01_collect_naver_search.py      → data/raw/online_buzz/YYYYMMDD/  (검색 API, .env 키 필요)
+data/manual/{naver_datalab,naver_searchad,google_trends}/     ← 웹 다운로드 원본(손대지 않음)
+python scripts/05_analyze.py                   → data/processed/online_buzz/<YYYYMMDD 또는 manual_YYYYMMDD>/
+python scripts/06_record_collection.py         → data/수집기록.csv (파일별 SHA-256, 사전 버전, 커밋)
+pytest -q                                      ← 코드 수정 후 항상 실행
 ```
 
-`scripts/01~04` 와 `naver.py`, `searchad.py` 는 API 수집용(선택)이다. 사용자가 요청하지 않으면 실행하지 않는다.
+`scripts/02~04`(데이터랩·검색광고·Google Trends API)는 선택이다. 사용자가 요청하지 않으면 실행하지 않는다.
+API 호출은 수집일에만 한다. 분석 중에 API 를 다시 부르지 않는다.
 
 ## 작업 규칙
 
 - **원본 파일은 수정하지 않는다.** 정리·변환은 코드로 하고 결과는 `data/processed/` 에 쓴다. 노트북이나 일회성 셀 대신 `src/` 함수 + `scripts/` 로 남겨 재실행 가능하게 한다.
-- 설정(대상 시군, 별칭, 관광지 그룹, 기간)은 `src/imsil_buzz/settings.py` 한 곳에서 바꾼다. 분석 기간 기본값 2022-01-01~2026-10-31.
+- 검색어·시군 별칭·거를 글은 `config/키워드사전_v*.csv` 에서만 바꾼다. 바꾸면 새 버전(v2, v3…) 파일로 만들고 비고에 날짜와 이유를 적는다. 기간 등 나머지 설정은 `src/imsil_buzz/settings.py`. 분석 기간 기본값 2022-01-01~2026-10-31.
 - 새 파일 형식을 읽어야 하면 `src/imsil_buzz/manual.py` 에 로더를 추가하고, 그 파일의 앞부분을 본뜬 작은 예시로 `tests/` 에 테스트를 추가한다.
 - 숫자를 보고서에 쓰기 전에 산출 CSV 에서 직접 확인한다. 추정치(예: 상대지수의 절대량 환산)는 '추정'으로 표기한다.
 - 그림: matplotlib, 한글 폰트 지정(예: NanumGothic/AppleGothic/Malgun Gothic), 300dpi PNG 를 `data/processed/online_buzz/<폴더>/fig/` 에 저장.
@@ -36,7 +44,9 @@ pytest -q                                             ← 코드 수정 후 항�
 
 - **언급 건수 ≠ 검색 트렌드.** 언급량은 글을 쓴 사람, 검색 트렌드는 검색한 사람의 관심이다. 단위·모집단이 달라 합치거나 같은 축에 놓지 않고 따로 해석한 뒤 둘의 격차(검색은 많은데 후기가 적은 관광지 등)를 시사점으로 쓴다.
 - 데이터랩·Google Trends 값은 조회 안 최대값=100 인 상대값이다. 서로 다른 조회 파일은 공통 기준 주제어(anchor)로 맞춘 뒤에만 비교한다(`analysis/trends.py: chain_by_anchor`).
-- 시군 비교의 분모는 전북특별자치도 14개 시군. '장수'는 장수(長壽)와 겹치므로 '장수군'만 인정. '임실' 단독 대신 '임실 여행/가볼만한곳/관광' 처럼 관광 맥락어를 붙인 검색어를 쓴다.
+- 시군 비교의 분모는 전북특별자치도 14개 시군. 키워드 사전의 범위 규칙을 따른다: 짧거나 흔한 이름은 '임실'·시설명을 붙이고(도화지→도화지 도예문화원, 오수→오수의견), 다른 곳에도 있는 이름은 임실 쪽 장소를 붙인다(붕어섬→옥정호 붕어섬, 옥정호 단독은 참고). 본문 시군 판정에서 '전주'·'완주' 단독은 다른 뜻(전주 대비, 마라톤 완주)과 겹쳐 관광 맥락 표현만 인정하고, '전주샹그릴라CC'는 임실로 센다. '장수'는 '장수군'만.
+- 검색 API `total` 은 '언급 건수'가 아니라 '검색 결과 수(수집일 기준 누적)'로 적는다. 같은 날 받은 값끼리만 비교한다.
+- 제출본에서는 블로그 닉네임(source 열의 bloggername)을 뺀다.
 - Google Trends 는 소규모 검색어가 0 으로 나올 수 있어 보조 지표로 쓴다.
 
 ## 지난 34개 관광지 분석과 맞출 방법론 (보고서 일관성)

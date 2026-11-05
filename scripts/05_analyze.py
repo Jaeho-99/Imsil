@@ -5,6 +5,7 @@
 기본 경로는 웹에서 직접 내려받은 파일(data/manual/, 형식은 data/manual/README.md)이며 결과는 M_ 로 시작한다.
   M_datalab_long.csv, M_datalab_index_anchor-<그룹>.csv, M_datalab_yearly/seasonality/peaks_*.csv   데이터랩
   M_google_interest_over_time.csv, M_google_related_queries.csv                                   Google Trends
+  M_searchad_keywords_long.csv, M_search_keywords_top.csv, M_search_keywords_network.csv         검색광고 키워드도구
   M_mention_share.csv                   언급 건수 표 → 시군별 비중
   M_posts_region_mention_share.csv, M_K_*.csv, M_R_*.csv   게시물 텍스트 → 시군 언급률, 키워드, 연관관계
 
@@ -49,14 +50,9 @@ def save(df: pd.DataFrame, out: Path, name: str, index: bool = False) -> None:
     print(f"  {name:38s} {len(df):>6} rows")
 
 
-IMSIL_PATTERN = "임실|옥정호|붕어섬|성수산|오수|사선대"
-
-
 def analyze_posts(posts: pd.DataFrame, out: Path, prefix: str) -> None:
     """임실 관련 게시물 키워드 빈도·TF-IDF·연관규칙·네트워크. prefix 로 API/수동 결과를 구분."""
-    posts = posts.drop_duplicates("link")
-    posts = posts[posts["title"].str.contains(IMSIL_PATTERN, na=False)
-                  | posts["description"].str.contains(IMSIL_PATTERN, na=False)]
+    posts = M.filter_topic_posts(posts.drop_duplicates("link"), S.TOPIC_EXCLUDES, S.IMSIL_TERMS)
     if posts.empty:
         print("  (임실 관련 게시물 없음 → 키워드 분석 생략)")
         return
@@ -92,6 +88,16 @@ def analyze_manual(out: Path) -> None:
                 save(T.yearly_summary(rel), out, f"M_datalab_yearly_anchor-{tag}.csv", index=True)
                 save(T.seasonality(rel), out, f"M_datalab_seasonality_anchor-{tag}.csv", index=True)
             save(T.peak_months(rel), out, f"M_datalab_peaks_anchor-{tag}.csv")
+    # 검색광고 키워드도구
+    sa = [MN.load_searchad_export(f) for f in MN.datalab_files(MANUAL_DIR / "naver_searchad")]
+    if sa:
+        sa = pd.concat(sa, ignore_index=True)
+        save(sa, out, "M_searchad_keywords_long.csv")
+        save(sa.drop_duplicates("keyword").sort_values("monthly_total", ascending=False), out, "M_search_keywords_top.csv")
+        if (sa["seed"] != "").any():
+            exploded = sa.assign(seed=sa["seed"].str.split(",")).explode("seed")
+            save(AS.search_keyword_network(exploded[exploded["seed"] != ""]), out, "M_search_keywords_network.csv")
+
     # Google Trends
     gdir = MANUAL_DIR / "google_trends"
     timeline = [f for f in sorted(gdir.glob("*.csv")) if "related" not in f.name.lower() and "관련" not in f.name]
@@ -108,7 +114,7 @@ def analyze_manual(out: Path) -> None:
              "M_mention_share.csv", index=True)
     posts = MN.load_posts(mdir)
     if not posts.empty:
-        share = M.regional_mention_share(posts, S.JEONBUK_REGIONS)
+        share = M.regional_mention_share(posts, S.JEONBUK_REGIONS, S.JEONBUK_REGION_EXCLUDES)
         save(share, out, "M_posts_region_mention_share.csv", index=True)
         analyze_posts(posts, out, "M_")
 
@@ -149,17 +155,17 @@ def main() -> None:
     # ---------------- 지표 C
     if (p := raw / "naver_jeonbuk_posts.jsonl").exists():
         posts = pd.DataFrame(read_jsonl(p))
-        share = M.regional_mention_share(posts, S.JEONBUK_REGIONS)
+        share = M.regional_mention_share(posts, S.JEONBUK_REGIONS, S.JEONBUK_REGION_EXCLUDES)
         save(share, out, "C_jeonbuk_mention_share.csv", index=True)
-        by_ch = pd.concat({ch: M.regional_mention_share(g, S.JEONBUK_REGIONS) for ch, g in posts.groupby("channel")})
+        by_ch = pd.concat({ch: M.regional_mention_share(g, S.JEONBUK_REGIONS, S.JEONBUK_REGION_EXCLUDES) for ch, g in posts.groupby("channel")})
         save(by_ch, out, "C_jeonbuk_mention_share_by_channel.csv", index=True)
-        save(M.co_mentioned_regions(posts.drop_duplicates("link"), S.JEONBUK_REGIONS).rename("n_posts").to_frame(),
+        save(M.co_mentioned_regions(posts.drop_duplicates("link"), S.JEONBUK_REGIONS, S.TREND_ANCHOR, S.JEONBUK_REGION_EXCLUDES).rename("n_posts").to_frame(),
              out, "C_imsil_co_regions.csv", index=True)
 
     # ---------------- 검색 트렌드 (데이터랩)
     rel_regions = rel_imsil = None
     if (p := raw / "datalab_regions_raw.json").exists():
-        rel_regions = T.chain_by_anchor(load_datalab(p), "임실")
+        rel_regions = T.chain_by_anchor(load_datalab(p), S.TREND_ANCHOR)
         save(rel_regions, out, "T_regions_index.csv")
         save(T.yearly_summary(rel_regions), out, "T_regions_yearly.csv", index=True)
         save(T.seasonality(rel_regions), out, "T_regions_seasonality.csv", index=True)
@@ -167,14 +173,14 @@ def main() -> None:
         save((tot / tot.sum() * 100).round(2).sort_values(ascending=False).rename("검색지수_점유율(%)").to_frame(),
              out, "T_regions_search_share.csv", index=True)
     if (p := raw / "datalab_regions_long_raw.json").exists():
-        save(T.chain_by_anchor(load_datalab(p), "임실"), out, "T_regions_index_long.csv")
+        save(T.chain_by_anchor(load_datalab(p), S.TREND_ANCHOR), out, "T_regions_index_long.csv")
     if (p := raw / "datalab_imsil_raw.json").exists():
-        rel_imsil = T.chain_by_anchor(load_datalab(p), "임실 관광(전체)")
+        rel_imsil = T.chain_by_anchor(load_datalab(p), S.TREND_ANCHOR)
         save(rel_imsil, out, "T_imsil_groups_index.csv")
         save(T.peak_months(rel_imsil), out, "T_imsil_peaks.csv")
         save(T.seasonality(rel_imsil), out, "T_imsil_seasonality.csv", index=True)
     if (p := raw / "datalab_imsil_daily_raw.json").exists():
-        save(T.chain_by_anchor(load_datalab(p), "임실 관광(전체)"), out, "T_imsil_groups_daily.csv")
+        save(T.chain_by_anchor(load_datalab(p), S.TREND_ANCHOR), out, "T_imsil_groups_daily.csv")
     if (p := raw / "datalab_imsil_segments.json").exists():
         seg = json.loads(p.read_text(encoding="utf-8"))
         save(T.concat(T.datalab_to_long(s["response"]).assign(segment=s["segment"]) for s in seg), out, "T_imsil_segments.csv")

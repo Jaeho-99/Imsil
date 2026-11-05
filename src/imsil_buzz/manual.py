@@ -136,3 +136,57 @@ def anchor_from_filename(name: str) -> str | None:
     """파일명에 '__anchor=임실' 처럼 기준 그룹을 적으면 여러 파일을 한 척도로 합친다."""
     m = re.search(r"anchor=([^_.]+)", name)
     return m.group(1) if m else None
+
+
+# ------------------------------------------------------------ 검색광고 키워드도구
+def _norm(h: str) -> str:
+    return re.sub(r"[\s()\[\]_]", "", str(h or "")).lower()
+
+
+def load_searchad_export(path: str | Path) -> pd.DataFrame:
+    """검색광고 '키워드 도구' 웹 다운로드(.xlsx/.csv) → [seed, keyword, monthly_pc, monthly_mobile, monthly_total, ...].
+
+    헤더 '연관키워드' 가 있는 줄을 찾고, '월간검색수' 열을 PC/모바일로 나눠 읽는다. '< 10' 은 5 로 바꾸고
+    censored_lt10 으로 표시한다. 시드는 파일명의 '__seed=임실여행' (여러 개면 '+' 로 연결)에서 읽는다.
+    """
+    from .utils import to_int_count
+
+    path = Path(path)
+    raw = _read_any(path)
+    hdr_row = None
+    for i in range(min(len(raw), 40)):
+        if any(_norm(c) in ("연관키워드", "키워드") for c in raw.iloc[i].tolist()):
+            hdr_row = i
+            break
+    if hdr_row is None:
+        raise ValueError(f"'연관키워드' 헤더 줄을 찾지 못했습니다: {path}")
+    header = [_norm(c) for c in raw.iloc[hdr_row].tolist()]
+
+    def col(*need: str) -> int | None:
+        for j, h in enumerate(header):
+            if all(n in h for n in need):
+                return j
+        return None
+
+    kw = col("연관키워드") if col("연관키워드") is not None else col("키워드")
+    pc, mo = col("월간검색수", "pc"), col("월간검색수", "모바일")
+    comp = col("경쟁정도")
+    if pc is None or mo is None:
+        raise ValueError(f"월간검색수(PC)/(모바일) 열을 찾지 못했습니다: {path} {header}")
+    m = re.search(r"seed=([^_.]+)", path.name)
+    seed = m.group(1).replace("+", ",") if m else ""
+    rows = []
+    for r in raw.iloc[hdr_row + 1 :].itertuples(index=False):
+        k = r[kw]
+        if k is None or (isinstance(k, float) and pd.isna(k)) or str(k).strip() == "":
+            continue
+        p_raw, m_raw = r[pc], r[mo]
+        p_, m_ = to_int_count(p_raw if p_raw is not None else 0), to_int_count(m_raw if m_raw is not None else 0)
+        rows.append({
+            "seed": seed, "keyword": str(k).strip(), "monthly_pc": p_, "monthly_mobile": m_, "monthly_total": p_ + m_,
+            "mobile_share": round(m_ / (p_ + m_), 4) if p_ + m_ else None,
+            "comp_idx": r[comp] if comp is not None else None,
+            "censored_lt10": str(p_raw).strip().startswith("<") or str(m_raw).strip().startswith("<"),
+            "source_file": path.name,
+        })
+    return pd.DataFrame(rows)

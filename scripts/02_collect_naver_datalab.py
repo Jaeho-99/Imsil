@@ -2,8 +2,8 @@
 
 생성 파일 (data/raw/online_buzz/<수집일>/)
   datalab_regions_raw.json     14개 시군 '여행·가볼만한곳·관광' 그룹, 임실을 기준(anchor)으로 묶은 요청들
-  datalab_imsil_raw.json       임실 관광지·축제별 키워드 그룹 (임실 관광(전체)를 anchor 로)
-  datalab_imsil_segments.json  임실 관광(전체) 그룹의 기기·성별·연령대별 추이
+  datalab_imsil_raw.json       임실 관광지·축제별 주제어 (키워드 사전의 기준어를 anchor 로)
+  datalab_imsil_segments.json  기준어(임실) 주제어의 기기·성별·연령대별 추이
 
 모든 응답은 원본 그대로 저장하고, 정규화(anchor chaining)는 05_analyze.py 에서 한다.
 """
@@ -25,11 +25,8 @@ AGE_BANDS = {"10대": ["2"], "20대": ["3", "4"], "30대": ["5", "6"], "40대": 
 
 
 def region_groups() -> dict[str, list[str]]:
-    g = {}
-    for region in S.JEONBUK_REGIONS:
-        name = S.REGION_QUERY_NAME_OVERRIDE.get(region, region)
-        g[region] = [t.format(r=name) for t in S.REGION_QUERY_TEMPLATES] + [t.format(r=name).replace(" ", "") for t in S.REGION_QUERY_TEMPLATES]
-    return g
+    """시군 주제어: 사전의 검색어 + 띄어쓰기 없는 변형."""
+    return {r: list(dict.fromkeys(qs + [q.replace(" ", "") for q in qs]))[:20] for r, qs in S.REGION_TREND_GROUPS.items()}
 
 
 def run_batches(cli, groups, anchor, start, end, unit, **filters):
@@ -53,15 +50,15 @@ def main() -> None:
     def dump(name, obj):
         (out / name).write_text(json.dumps(obj, ensure_ascii=False, indent=1), encoding="utf-8")
 
-    dump("datalab_regions_raw.json", run_batches(cli, region_groups(), "임실", a.start, a.end, a.unit))
+    dump("datalab_regions_raw.json", run_batches(cli, region_groups(), S.TREND_ANCHOR, a.start, a.end, a.unit))
     # 장기 추세(2016~)도 같이 받아 둔다
-    dump("datalab_regions_long_raw.json", run_batches(cli, region_groups(), "임실", S.TREND_LONG_START, a.end, "month"))
-    dump("datalab_imsil_raw.json", run_batches(cli, S.IMSIL_TREND_GROUPS, "임실 관광(전체)", a.start, a.end, a.unit))
+    dump("datalab_regions_long_raw.json", run_batches(cli, region_groups(), S.TREND_ANCHOR, S.TREND_LONG_START, a.end, "month"))
+    dump("datalab_imsil_raw.json", run_batches(cli, S.IMSIL_TREND_GROUPS, S.TREND_ANCHOR, a.start, a.end, a.unit))
     # 일 단위(축제 전후 등 이벤트 분석용)
-    dump("datalab_imsil_daily_raw.json", run_batches(cli, S.IMSIL_TREND_GROUPS, "임실 관광(전체)", a.start, a.end, "date"))
+    dump("datalab_imsil_daily_raw.json", run_batches(cli, S.IMSIL_TREND_GROUPS, S.TREND_ANCHOR, a.start, a.end, "date"))
 
     seg = []
-    base = {"임실 관광(전체)": S.IMSIL_TREND_GROUPS["임실 관광(전체)"]}
+    base = {S.TREND_ANCHOR: S.IMSIL_TREND_GROUPS[S.TREND_ANCHOR]}
     for dev in ("pc", "mo"):
         seg.append({"segment": f"device={dev}", "response": cli.datalab_search(base, a.start, a.end, a.unit, device=dev)})
     for gen in ("m", "f"):

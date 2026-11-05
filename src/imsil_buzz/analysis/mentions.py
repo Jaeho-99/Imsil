@@ -45,25 +45,48 @@ def posting_rate(items: pd.DataFrame, end_date: str) -> pd.DataFrame:
     return pd.DataFrame(rows).sort_values(["channel", "posts_per_day"], ascending=[True, False]).reset_index(drop=True)
 
 
-def compile_alias_patterns(regions: dict[str, list[str]]) -> dict[str, re.Pattern]:
-    # 긴 별칭부터 매칭. '임실'이 '임실치즈'의 일부로 등장해도 임실 언급으로 인정한다.
-    return {r: re.compile("|".join(sorted(map(re.escape, al), key=len, reverse=True))) for r, al in regions.items()}
+class RegionMatcher:
+    """게시물 텍스트에서 언급된 시군을 찾는다 (키워드 사전의 '본문 인정 표현'·'본문 제외 표현').
+
+    - 모든 시군의 표현을 하나의 정규식으로 묶어 긴 표현부터 맞춘다. 그래서 임실의 '전주샹그릴라'가
+      전주의 표현보다 먼저 잡혀 임실로 센다.
+    - '본문 제외 표현'(예: '전주 대비', '마라톤 완주')은 매칭 전에 지운다.
+    """
+
+    def __init__(self, regions: dict[str, list[str]], excludes: dict[str, list[str]] | None = None):
+        self.order = list(regions)
+        self.alias_to_region: dict[str, str] = {}
+        for r, aliases in regions.items():
+            for al in aliases:
+                prev = self.alias_to_region.setdefault(al, r)
+                if prev != r:
+                    raise ValueError(f"표현 '{al}' 이 {prev} 와 {r} 에 모두 있습니다")
+        alts = sorted(self.alias_to_region, key=len, reverse=True)
+        self.pattern = re.compile("|".join(map(re.escape, alts))) if alts else None
+        ex = sorted({e for es in (excludes or {}).values() for e in es}, key=len, reverse=True)
+        self.exclude = re.compile("|".join(map(re.escape, ex))) if ex else None
+
+    def __call__(self, text: str) -> list[str]:
+        t = text or ""
+        if self.exclude is not None:
+            t = self.exclude.sub(" ", t)
+        if self.pattern is None:
+            return []
+        found = {self.alias_to_region[m.group(0)] for m in self.pattern.finditer(t)}
+        return [r for r in self.order if r in found]
 
 
-def detect_regions(text: str, patterns: dict[str, re.Pattern]) -> list[str]:
-    return [r for r, p in patterns.items() if p.search(text or "")]
-
-
-def regional_mention_share(posts: pd.DataFrame, regions: dict[str, list[str]]) -> pd.DataFrame:
+def regional_mention_share(posts: pd.DataFrame, regions: dict[str, list[str]],
+                           excludes: dict[str, list[str]] | None = None) -> pd.DataFrame:
     """전북 관광 게시물 표본에서 시군별 언급 게시물 수와 비중.
 
     - 언급률(%)       = 해당 시군 언급 게시물 / 전체 표본 게시물
     - 언급 점유율(%)  = 해당 시군 언급 횟수 / 모든 시군 언급 횟수 합 (한 게시물이 여러 시군 언급 가능)
     """
-    pats = compile_alias_patterns(regions)
+    match = RegionMatcher(regions, excludes)
     p = posts.drop_duplicates("link").copy()
     p["text"] = p["title"].fillna("") + " " + p["description"].fillna("")
-    p["regions"] = p["text"].map(lambda t: detect_regions(t, pats))
+    p["regions"] = p["text"].map(match)
     n = len(p)
     ex = p.explode("regions").dropna(subset=["regions"])
     cnt = ex.groupby("regions")["link"].nunique().reindex(list(regions), fill_value=0)
@@ -77,10 +100,25 @@ def regional_mention_share(posts: pd.DataFrame, regions: dict[str, list[str]]) -
     return out
 
 
-def co_mentioned_regions(posts: pd.DataFrame, regions: dict[str, list[str]], target: str = "임실") -> pd.Series:
+def co_mentioned_regions(posts: pd.DataFrame, regions: dict[str, list[str]], target: str = "임실",
+                         excludes: dict[str, list[str]] | None = None) -> pd.Series:
     """target 이 언급된 게시물에서 함께 언급된 시군(연계 관광 동선 파악용)."""
-    pats = compile_alias_patterns(regions)
+    match = RegionMatcher(regions, excludes)
     texts = (posts["title"].fillna("") + " " + posts["description"].fillna("")).tolist()
-    rows = [detect_regions(t, pats) for t in texts]
-    co = pd.Series([r for rs in rows if target in rs for r in rs if r != target], dtype="object")
+    co = pd.Series([r for t in texts for rs in [match(t)] if target in rs for r in rs if r != target], dtype="object")
     return co.value_counts()
+
+
+def filter_topic_posts(posts: pd.DataFrame, topic_excludes: dict[str, list[str]], must_terms: list[str]) -> pd.DataFrame:
+    """임실 관련 게시물 정제: (1) 주제어별 '거를 글' 표현이 있는 글 제거, (2) 임실 관련 표현이 없는 글 제거."""
+    p = posts.copy()
+    text = p["title"].fillna("") + " " + p["description"].fillna("")
+    keep = pd.Series(True, index=p.index)
+    if "topic" in p.columns:
+        for topic, ex in topic_excludes.items():
+            if ex:
+                bad = (p["topic"] == topic) & text.str.contains("|".join(map(re.escape, ex)), regex=True)
+                keep &= ~bad
+    if must_terms:
+        keep &= text.str.contains("|".join(map(re.escape, must_terms)), regex=True)
+    return p[keep]

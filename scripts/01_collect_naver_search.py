@@ -29,10 +29,7 @@ from imsil_buzz.utils import write_jsonl
 
 
 def region_queries():
-    for region in S.JEONBUK_REGIONS:
-        name = S.REGION_QUERY_NAME_OVERRIDE.get(region, region)
-        for tpl in S.REGION_QUERY_TEMPLATES:
-            yield region, tpl.format(r=name)
+    yield from S.REGION_QUERIES  # (시군, 검색어) — 키워드 사전 '쓰는 곳=언급비중'
 
 
 def collect_totals(cli: NaverClient, out: Path) -> None:
@@ -64,10 +61,10 @@ def collect_jeonbuk_posts(cli: NaverClient, out: Path) -> None:
 
 def collect_imsil_posts(cli: NaverClient, out: Path) -> None:
     def gen():
-        for q in tqdm(S.IMSIL_POST_QUERIES, desc="imsil posts"):
+        for topic, q in tqdm(S.IMSIL_POST_QUERIES, desc="imsil posts"):
             for ch in S.NAVER_SEARCH_CHANNELS:
                 for it in cli.iter_search(ch, q, sort="sim"):
-                    yield it
+                    yield {**it, "topic": topic}
     write_jsonl(out / "naver_imsil_posts.jsonl", gen())
 
 
@@ -86,7 +83,8 @@ def main() -> None:
     meta_p = out / "meta.json"
     meta = json.loads(meta_p.read_text(encoding="utf-8")) if meta_p.exists() else {}
     meta["naver_search"] = {"collected_at": dt.datetime.now().isoformat(timespec="seconds"), "backend": cli.backend,
-                            "steps": a.only.split(","), "channels": S.NAVER_SEARCH_CHANNELS}
+                            "steps": a.only.split(","), "channels": S.NAVER_SEARCH_CHANNELS,
+                            "keyword_dict": S.KEYWORD_DICT_FILE.name}
     meta_p.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
     print("saved ->", out)
 
