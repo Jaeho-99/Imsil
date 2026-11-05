@@ -1,7 +1,0 @@
-requests>=2.31
-pandas>=2.1
-tqdm>=4.66
-kiwipiepy>=0.18      # 형태소 분석 (지난 리뷰 분석과 동일)
-networkx>=3.2        # 키워드 네트워크 중심성
-pytrends==4.9.2      # Google Trends (비공식, 2025-04 아카이브. 실패 시 수동 CSV)
-pytest>=8            # 테스트

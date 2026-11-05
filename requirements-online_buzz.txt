@@ -1,0 +1,16 @@
+# 추가 분석 1: 온라인 언급·검색 키워드 (src/online_buzz/) — Python 3.11 이상
+#   pip install -r requirements-online_buzz.txt
+# 레포 공통 requirements.txt 와 같은 형태소 분석기 버전을 쓴다(34개소 결과와 토큰을 맞추기 위해 고정).
+
+kiwipiepy==0.23.2
+kiwipiepy_model==0.23.0
+
+pandas>=2.2
+openpyxl          # 데이터랩·키워드도구 .xlsx 다운로드 파일
+networkx          # 키워드 동시출현 네트워크
+requests          # 네이버 검색 API
+matplotlib        # 보고서 그림
+pytest            # python -m pytest -q src/online_buzz/tests
+
+# 선택: Google Trends 를 API 로 받을 때만 (04_collect_google_trends.py). 기본은 웹 다운로드
+#   pip install pytrends==4.9.2
