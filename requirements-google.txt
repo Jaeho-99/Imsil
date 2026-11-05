@@ -1,0 +1,13 @@
+# 구글 지도 리뷰 수집기 의존 패키지
+# 아래 버전은 2026-08-11 실제 수집에 성공한 조합입니다 (Python 3.14 / Windows 11).
+#
+#   python -m venv .venv                       (레포 최상위에서)
+#   .venv\Scripts\python -m pip install -r requirements-google.txt
+#   .venv\Scripts\python -m playwright install chromium
+# 사용법: docs/collect_google.md
+
+playwright==1.62.0
+playwright-stealth==2.0.3
+pandas==3.0.5
+numpy==2.5.2
+openpyxl==3.1.5
