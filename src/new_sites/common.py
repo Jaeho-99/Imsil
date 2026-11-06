@@ -1,16 +1,13 @@
 # -*- coding: utf-8 -*-
-"""src/new_sites/ 공통 도구 — 설정 불러오기, 자체 검사 출력, 한글 글꼴, API 키."""
+"""src/new_sites/ 공통 도구 — 설정 불러오기, 자체 검사 출력, 한글 글꼴, 파일 읽기·쓰기."""
 from __future__ import annotations
 
-import os
 import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent            # src/new_sites/
 sys.path.insert(0, str(HERE))
 import config  # noqa: E402
-
-ENV_FILE = config.ENV_FILE                        # 레포 최상위 .env
 
 
 class Checks:
@@ -51,27 +48,6 @@ def setup_font():
     return plt
 
 
-def anthropic_client():
-    """ANTHROPIC_API_KEY 를 환경변수 → 레포 최상위 .env 순서로 찾는다."""
-    try:
-        import anthropic
-    except ImportError:
-        sys.exit("오류: anthropic 패키지가 없습니다.  pip install anthropic")
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        for env in (ENV_FILE,):
-            if env.exists():
-                for line in env.read_text(encoding="utf-8").splitlines():
-                    k, _, v = line.strip().removeprefix("export ").partition("=")
-                    if k.strip() == "ANTHROPIC_API_KEY" and v.strip():
-                        os.environ["ANTHROPIC_API_KEY"] = v.strip().strip("'\"")
-                        break
-            if os.environ.get("ANTHROPIC_API_KEY"):
-                break
-    if not os.environ.get("ANTHROPIC_API_KEY") and not os.environ.get("ANTHROPIC_AUTH_TOKEN"):
-        sys.exit("오류: ANTHROPIC_API_KEY 가 없습니다. 레포 최상위 .env 에 넣어 주세요 (.env.example 참고).")
-    return anthropic.Anthropic(max_retries=8, timeout=600.0)
-
-
 def read_csv(path, **kw):
     import pandas as pd
     return pd.read_csv(path, encoding="utf-8-sig", **kw)
@@ -89,6 +65,35 @@ def rel(p) -> str:
         return str(Path(p).resolve().relative_to(config.REPO))
     except ValueError:
         return str(p)
+
+
+# ─────────────────────────────────────────────────────────────
+# 입력기록 — 결과를 만든 입력 파일과 내용 해시
+# 다른 PC 에서 같은 판정 파일로 돌렸는지, 결과가 지금 판정과 맞는지 확인할 때 쓴다.
+# ─────────────────────────────────────────────────────────────
+RECORD = "입력기록.json"
+
+
+def file_sha(p) -> str:
+    import hashlib
+    return hashlib.sha256(Path(p).read_bytes()).hexdigest()
+
+
+def _record(files) -> dict:
+    return {rel(p).replace("\\", "/"): file_sha(p) for p in files if Path(p).exists()}
+
+
+def save_inputs(out_dir, files):
+    import json
+    (Path(out_dir) / RECORD).write_text(json.dumps(_record(files), ensure_ascii=False, indent=2),
+                                        encoding="utf-8")
+
+
+def inputs_changed(out_dir, files) -> bool:
+    """out_dir 의 결과를 만든 뒤 입력 파일이 바뀌었거나 기록이 없으면 True."""
+    import json
+    f = Path(out_dir) / RECORD
+    return not f.exists() or json.loads(f.read_text(encoding="utf-8")) != _record(files)
 
 
 # ─────────────────────────────────────────────────────────────

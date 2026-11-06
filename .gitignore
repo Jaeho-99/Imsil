@@ -238,7 +238,7 @@ output/collect/google/
 # 브라우저에서 내보낸 HAR (쿠키가 남을 수 있다 — 내 PC 에만 둔다)
 *.har
 
-# 추가 관광지: 원문을 담은 번역 대상 목록 (번역결과.csv 는 커밋해 재현에 쓴다)
+# 추가 관광지: 원문을 담은 번역 대상 목록 (input/new_sites/번역결과.csv 는 커밋해 재현에 쓴다)
 output/new_sites/번역대상.csv
 # 추가 관광지: 실명 → ○○○ 치환목록. find 열에 실명이 그대로 있으므로 내 PC 에만 둔다
 input/new_sites/비식별_치환목록.csv

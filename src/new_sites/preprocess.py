@@ -11,16 +11,19 @@
   5. 날짜는 '2022.6.14' 형식으로 쓴다
   그 밖의 문장부호(~ ! ? . >< 등)와 줄바꿈은 그대로 둔다. 키워드 분석용 정제는 keywords.py 에서 따로 한다.
 
-번역
-  --translate 를 주면 API 로 번역하고 output/new_sites/번역결과.csv 에 원문·번역문을 남긴다.
-  옵션 없이 돌리면 번역 대상만 output/new_sites/번역대상.csv 로 내보내고 원문을 그대로 둔다.
-  사람이 번역결과.csv 를 직접 채우거나 고쳐도 되며, 이미 있는 번역은 다시 요청하지 않는다.
+번역 (API 를 쓰지 않는다)
+  아직 번역이 없는 외국어 리뷰를 output/new_sites/번역대상.csv 로 내보내고, 그 리뷰는 원문 그대로 둔다.
+  Claude Code 가 input/new_sites/claude_지시문/번역.md 대로 번역해 input/new_sites/번역결과.csv
+  (열: reviewId, 원문, 번역, 방법) 로 저장한 뒤 다시 실행하면 번역문을 쓴다.
+  2026-11 수집분(성수산·오수의견국민여가캠핑장 네이버 리뷰)에는 외국어 리뷰가 없다.
 
 입력  output/new_sites/추가관광지_리뷰데이터.csv (build_dataset.py 결과)
+      input/new_sites/번역결과.csv (있을 때만)
 출력  output/new_sites/추가관광지_리뷰데이터_1차전처리.csv
+      output/new_sites/번역대상.csv (번역이 빠진 외국어 리뷰가 있을 때만)
 
 실행
-    python src/new_sites/preprocess.py --translate
+    python src/new_sites/preprocess.py
 """
 from __future__ import annotations
 
@@ -29,7 +32,7 @@ import re
 
 import pandas as pd
 
-from common import Checks, anthropic_client, config, name_candidates, read_csv, rel, write_csv
+from common import Checks, config, name_candidates, read_csv, rel, write_csv
 
 EMOJI = re.compile(
     "[\U0001F000-\U0001FAFF\U00002600-\U000027BF\U0001F1E6-\U0001F1FF\U00002300-\U000023FF"
@@ -65,54 +68,37 @@ def clean(text):
     return t if CONTENT.search(t) else pd.NA
 
 
-TRANSLATE_PROMPT = """다음은 한국 관광지에 대한 외국어 리뷰다. 한국어로 자연스럽게 번역하라.
-- 뜻을 더하거나 빼지 말고, 평가의 강도와 말투를 살린다.
-- 고유명사(지명·인명)는 한국어 표기로 옮긴다.
-- 줄바꿈은 원문대로 유지한다.
-- 번역문만 출력한다. 설명·따옴표·머리말을 붙이지 않는다."""
-
-
-def translate(todo: pd.DataFrame) -> pd.DataFrame:
-    client = anthropic_client()
-    out = []
-    for i, r in enumerate(todo.itertuples(), 1):
-        resp = client.messages.create(
-            model=config.SENT_MODEL, max_tokens=4000,
-            system=TRANSLATE_PROMPT,
-            output_config={"effort": "low"},
-            messages=[{"role": "user", "content": r.body}],
-        )
-        text = "".join(b.text for b in resp.content if b.type == "text").strip()
-        out.append({"reviewId": r.reviewId, "원문": r.body, "번역": text,
-                    "방법": f"API {config.SENT_MODEL}"})
-        print(f"  번역 {i}/{len(todo)} {r.reviewId}")
-    return pd.DataFrame(out)
-
-
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--translate", action="store_true", help="외국어 리뷰를 API 로 번역")
-    args = ap.parse_args()
+    argparse.ArgumentParser(description=__doc__.split("\n")[0]).parse_args()
 
     ck = Checks("1차 전처리")
     ck("통합 데이터 존재", config.DATASET.exists(), rel(config.DATASET))
     df = read_csv(config.DATASET, dtype={"reviewId": str})
     n = len(df)
 
-    # 1. 번역
+    # 1. 번역 — Claude Code 가 만든 input/new_sites/번역결과.csv 를 읽는다
     foreign = df[df["body"].map(is_foreign)][["reviewId", "body"]]
-    done = read_csv(config.TRANSLATE_DONE, dtype=str) if config.TRANSLATE_DONE.exists() else \
+    done = read_csv(config.TRANSLATE_DONE, dtype=str).fillna("") if config.TRANSLATE_DONE.exists() else \
         pd.DataFrame(columns=["reviewId", "원문", "번역", "방법"])
+    if len(done):
+        ck("번역결과 열 구성", {"reviewId", "원문", "번역"} <= set(done.columns),
+           f"{rel(config.TRANSLATE_DONE)} 에 reviewId·원문·번역 열이 있어야 합니다")
+        done = done[done["번역"].str.strip() != ""]
+        body = dict(zip(foreign["reviewId"], foreign["body"]))
+        stale = [r for r, o in zip(done["reviewId"], done["원문"]) if r in body and o.strip() != str(body[r]).strip()]
+        ck("번역결과의 원문이 지금 본문과 같음", not stale,
+           f"원문이 바뀐 리뷰 {len(stale)}건 {stale[:5]} — 그 행을 지우고 다시 번역하세요" if stale else
+           f"{len(done)}건", fatal=False)
+        done = done[~done["reviewId"].isin(stale)]
     todo = foreign[~foreign["reviewId"].isin(done["reviewId"])]
-    if len(todo) and args.translate:
-        done = pd.concat([done, translate(todo)], ignore_index=True)
-        write_csv(done, config.TRANSLATE_DONE)
-        todo = todo.iloc[0:0]
     if len(todo):
-        write_csv(todo, config.TRANSLATE_TODO)
+        write_csv(todo.rename(columns={"body": "원문"}), config.TRANSLATE_TODO)
+    elif config.TRANSLATE_TODO.exists():
+        config.TRANSLATE_TODO.unlink()
     ck("외국어 리뷰 번역", len(todo) == 0,
        f"대상 {len(foreign)} · 완료 {len(foreign) - len(todo)} · 미번역 {len(todo)}"
-       + (f" → {rel(config.TRANSLATE_TODO)} (--translate 로 번역)" if len(todo) else ""),
+       + (f" → {rel(config.TRANSLATE_TODO)} 를 Claude Code 로 번역해 {rel(config.TRANSLATE_DONE)} 에 "
+          "저장한 뒤 다시 실행 (input/new_sites/claude_지시문/번역.md)" if len(todo) else ""),
        fatal=False)
     tr = dict(zip(done["reviewId"], done["번역"]))
     df["body"] = [tr.get(rid, b) for rid, b in zip(df["reviewId"], df["body"])]

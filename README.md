@@ -14,7 +14,7 @@
 
 ```
 src/      코드. 분석 단계마다 하위 폴더가 하나씩 있습니다
-input/    코드가 만들지 않는 파일: 통합 리뷰 데이터, 사람이 판정한 표, LLM 응답을 붙여 넣은 파일
+input/    코드가 만들지 않는 파일: 통합 리뷰 데이터, 사람이 판정한 표, LLM 판정을 저장한 파일, LLM 에 주는 지시문
 output/   코드가 만든 파일. 단계마다 하위 폴더가 있고, 앞 단계의 output 을 다음 단계가 읽습니다
 docs/     방법 기록, 라벨링 지침서, 제출 당시 문서
 ```
@@ -50,9 +50,9 @@ pip install -r requirements.txt
 
 ### API 키는 결과 재현에 필요 없습니다
 
-보고서 결과는 API 없이 만들었습니다. 감성분석의 LLM 판정은 ChatGPT 웹 UI에 붙여 넣어 받은 응답을, 만족·불만 요인 판정은 Claude Code 대화에서 만든 결과를 `input/`에 저장해 두었고, 연관관계는 원본 키워드로 계산했습니다(`--no-llm`). 아래 명령은 모두 이 파일들을 읽습니다.
+보고서 결과는 API 없이 만들었습니다. 감성분석의 LLM 판정은 ChatGPT 웹 UI에 붙여 넣어 받은 응답을, 만족·불만 요인 판정은 Claude Code 대화에서 만든 결과를 `input/`에 저장해 두었고, 연관관계는 원본 키워드로 계산했습니다(`--no-llm`). 아래 명령은 모두 이 파일들을 읽습니다. 추가 관광지 분석도 API를 쓰지 않습니다. LLM 판정은 Claude Code가 지시문대로 만들어 `input/new_sites/`에 저장합니다.
 
-Anthropic API를 직접 부르는 기능(연관관계 키워드 정규화, 만족·불만 요인 자동 추출, 추가 관광지의 번역·감성·요인)을 쓸 때만 [`.env.example`](.env.example)을 `.env`로 복사해 `ANTHROPIC_API_KEY`를 넣습니다. `.env`는 git에 올라가지 않습니다.
+34개소 스크립트의 Anthropic API 기능(연관관계 키워드 정규화, 만족·불만 요인 자동 추출)을 직접 쓸 때만 [`.env.example`](.env.example)을 `.env`로 복사해 `ANTHROPIC_API_KEY`를 넣습니다. `.env`는 git에 올라가지 않습니다.
 
 ### 옛 폴더 구조에서 옮겨 오기
 
@@ -192,15 +192,19 @@ T-8 점검 결과는 [docs/시계열_분석_통합점검.md](docs/시계열_분�
 
 ### 7. 추가 관광지 2개소 — `src/new_sites/`
 
-성수산과 오수의견국민여가캠핑장의 네이버 리뷰를 34개소와 같은 방법으로 분석합니다. 34개소 코드를 고치지 않고 불러 씁니다. 구글 지도에는 두 곳의 리뷰가 없어 네이버만 씁니다.
+성수산과 오수의견국민여가캠핑장의 네이버 리뷰를 34개소와 같은 방법으로 분석합니다. 34개소 코드를 고치지 않고 불러 씁니다. 구글 지도에는 두 곳의 리뷰가 없어 네이버만 씁니다. API를 쓰지 않습니다.
 
 ```bash
-python src/new_sites/collect_naver.py       # 수집 → output/collect/naver/
-python src/new_sites/run_all.py --no-api    # API 없이 할 수 있는 단계만
-python src/new_sites/run_all.py             # 전 과정 (번역·감성·요인에 API 사용)
+python src/new_sites/collect_naver.py       # 1. 수집 → output/collect/naver/
+python src/new_sites/run_all.py             # 2. 코드 단계. 판정 대상을 output/new_sites/ 에 내보낸다
+                                            # 3. Claude Code 판정: input/new_sites/claude_지시문/ 의 지시문 4개
+                                            # 4. 사람 검토: input/new_sites/사람검토표.xlsx
+python src/new_sites/run_all.py             # 5. 판정을 읽어 최종 결과·요약을 만든다
 ```
 
-단계별 명령, 사람이 할 일(실명 확인, 감성 검토표 작성), 시험 실행 방법은 [docs/new_sites.md](docs/new_sites.md)에 있습니다.
+- LLM이 판정하는 단계(문장 감성, 만족·불만 요인)는 코드가 판정 대상을 내보내고, Claude Code가 지시문대로 판정해 `input/new_sites/`에 저장하면, 코드가 그 파일을 읽어 결과를 만듭니다. 판정 파일을 git에 올리므로 다른 PC에서도 같은 결과가 나옵니다.
+- `run_all.py`는 판정이 덜 된 단계를 건너뛰고 마지막에 남은 일을 알려 줍니다.
+- Claude Code에 보낼 문장, 단계별 명령, 사람이 할 일(실명 확인, 감성 검토표 작성), 시험 실행 방법은 [docs/new_sites.md](docs/new_sites.md)에 있습니다.
 
 ## 재현 확인 (2026-11-05)
 
@@ -213,7 +217,7 @@ python src/new_sites/run_all.py             # 전 과정 (번역·감성·요인
 | 연관관계 | 규칙과 수치는 같고 행 순서만 실행마다 다릅니다. 같은 점수인 규칙 사이의 순서가 파이썬 해시 시드에 따라 바뀌기 때문입니다 |
 | 만족·불만 요인 | CSV가 같습니다 |
 | 키워드 | 노트북으로 만든 기존 결과와 비교했습니다(Kiwi 0.23.2). 빈도·Trigram Top 20은 같습니다. 토큰 파일은 5,267행 중 3행이 다르고, Bigram은 160행 중 5행이 다릅니다. TF-IDF는 점수 차이가 0.001 미만이지만 20위에서 동점인 단어가 바뀌어 420개 중 30개가 다릅니다 |
-| 추가 관광지 | 시험 실행(`--demo`)이 끝까지 돌아갑니다 |
+| 추가 관광지 | 시험 실행(`--demo`)이 끝까지 돌아갑니다. 34개소 ChatGPT 판정을 검증셋 판정 자리에 넣으면 채점이 보고서 수치(macro-F1 0.906 · 0.908, 불일치 4.20%)와 같습니다 (2026-11-06) |
 
 - 그림(PNG)은 글꼴이 다른 환경에서 그려 바이트 비교는 하지 않았습니다. 그림에 쓰인 값은 위 CSV와 같습니다.
 - `output/sentiment/pilot/dict_fullscale_result.txt`는 옛 구조에서도 다시 실행하면 커밋된 결과와 다릅니다(5,697문장 → 5,682문장). 이 결과를 만든 뒤 문장 분리 규칙이 바뀌었기 때문이며, 폴더 정리와는 관계없습니다.
