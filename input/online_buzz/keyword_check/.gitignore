@@ -1,0 +1,4 @@
+# 사람이 '맞음' 열을 채운 확인표. 블로그 링크(작성자 ID)와 제목·요약이 있어 올리지 않는다.
+# 판정 결과는 summarize 가 링크를 뺀 판정_*.csv 로 output/online_buzz/keyword_check/ 에 남긴다.
+*
+!.gitignore

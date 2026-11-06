@@ -1,0 +1,4 @@
+# 검색 API 수집 원본: 블로그 링크에 작성자 ID 가 들어 있어 git 에 올리지 않는다 (이 파일만 커밋).
+# 원본의 지문(SHA-256)은 output/online_buzz/수집기록.csv 에 남는다 (06_record_collection.py).
+*
+!.gitignore
