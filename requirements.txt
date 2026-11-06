@@ -1,0 +1,24 @@
+# 임실군 관광지 리뷰 분석 — Python 3.11 이상
+#   python -m venv .venv
+#   .venv\Scripts\python -m pip install -r requirements.txt      (Windows)
+#   .venv/bin/python -m pip install -r requirements.txt          (macOS · Linux)
+#
+# 결과를 재현해 확인한 조합: Python 3.13 · pandas 3.0.5 · numpy 2.5.3 · scikit-learn 1.9.1 ·
+# matplotlib 3.11.2 · openpyxl 3.1.5 · networkx 3.7 (2026-11-05)
+
+# 키워드 분석은 형태소 분석기 버전에 따라 토큰이 달라진다. 34개소 결과를 만든 버전으로 고정한다.
+kiwipiepy==0.23.2
+kiwipiepy_model==0.23.0
+
+pandas>=2.2
+numpy
+matplotlib
+openpyxl
+scikit-learn
+networkx
+requests          # 네이버 리뷰 수집
+anthropic         # API 를 쓰는 단계에서만 (README 참고)
+
+# 감성분석 방법 ②(사전학습 모델) 스크립트를 다시 돌릴 때만 따로 설치한다
+#   pip install torch transformers
+# 구글 지도 리뷰 수집기는 requirements-google.txt 를 따로 설치한다.

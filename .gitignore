@@ -223,16 +223,29 @@ __marimo__/
 # 비밀값·로그인 세션: 절대 커밋 금지
 .env.*
 !.env.example
+# 이 컴퓨터에만 두는 파일: 구글 로그인 프로필, 진단 스냅샷, 이전 실행 보관본
+.local/
 chrome_profile_google/
 diagnostics/
 
 # 작성자 닉네임·ID가 포함된 수집 원본: 절대 커밋 금지
-1_데이터수집/네이버/output/
-1_데이터수집/구글/output/
+output/collect/naver/
+output/collect/google/
 *_raw.json
 *_naver_reviews.csv
 *_google_reviews.csv
 *_google_reviews.xlsx
+# 브라우저에서 내보낸 HAR (쿠키가 남을 수 있다 — 내 PC 에만 둔다)
+*.har
+
+# 추가 관광지: 원문을 담은 번역 대상 목록 (번역결과.csv 는 커밋해 재현에 쓴다)
+output/new_sites/번역대상.csv
+# 추가 관광지: 실명 → ○○○ 치환목록. find 열에 실명이 그대로 있으므로 내 PC 에만 둔다
+input/new_sites/비식별_치환목록.csv
+# 시험 실행 산출물
+output/_demo/
+# 덮어쓰기 전에 스크립트가 남기는 백업
+output/**/백업/
 
 # 내부 보고서·제출 묶음
 *.hwp
