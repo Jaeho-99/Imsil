@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""[감성] 문장 단위 감성분석 — 34개소 방법(③ LLM, 프롬프트 v1)을 API 로 그대로 적용
+"""[감성] 문장 단위 감성분석 — 34개소 방법(③ LLM, 프롬프트 v1)을 API 없이 그대로 적용
 
 34개소와 같은 것
   - 문장 분리: src/sentiment/textsplit.py 의 split_sentences() 를 그대로 import
@@ -7,26 +7,33 @@
     한 글자도 고치지 않고 사용
   - 입력 형식: `unit_id | sent_no/n_sent | 관광지 | 플랫폼 | 문장`, 150문장 묶음, 리뷰 경계 유지,
     리뷰 순서 섞기, 별점 미제공
+  - 실행 방식: 대화형 LLM 이 묶음을 하나씩 받아 판정하고, 그 응답을 파일로 저장한다. 독립 2회(run1·run2),
+    두 run 은 서로 다른 새 대화에서 한다.
   - 출력 파싱: src/sentiment/llm_labeling/check_output.py 의 load_run()
   - 리뷰 단위 감성: 문장에 긍정·부정이 함께 있거나 `혼합`이면 혼합 (fullscale/merge_fullscale.py 규칙)
   - 채점: docs/sentiment/채점_규칙.md — 본 TEST 382 macro-F1, 보강 166 부정 재현율,
     `혼합`=오답(주)/제외(민감도)
 
 34개소와 다른 것 — 보고서에 밝힐 것
-  - 실행 경로: ChatGPT 웹 UI → Anthropic API (config.SENT_MODEL). 묶음마다 새 요청
-    [프롬프트 → "준비됨" → 묶음] 을 보내므로 앞 묶음의 답이 뒤 묶음에 새지 않는다.
-  - 현재 모델은 temperature 를 받지 않는다. 34개소와 같이 독립 2회 실행 불일치율로 변동성을 보고한다.
-  - 모델이 바뀌었으므로 `validate` 로 **34개소 사람 검증셋 548문장을 이 모델로 다시 채점**해
+  - 판정 도구: ChatGPT 웹 UI → Claude Code. 묶음과 프롬프트는 같다. Claude Code 는 묶음을 붙여 넣어 받지 않고
+    파일로 읽으며, 사람 라벨·다른 run 결과를 열지 않도록 지시문이 읽을 파일을 정한다.
+  - 도구가 바뀌었으므로 `validate` 로 **34개소 사람 검증셋 548문장을 같은 도구로 다시 판정·채점**해
     macro-F1 을 34개소(0.906)와 나란히 보고한다. 이 숫자가 두 분석을 잇는 근거다.
 
+판정 파일 (Claude Code 가 만들어 input/ 에 저장 — 지시문: input/new_sites/claude_지시문/)
+  input/new_sites/sentiment/runs/run1/, run2/          추가 관광지 묶음 판정
+  input/new_sites/sentiment/검증_34개소/run1/, run2/     34개소 검증셋 묶음 판정
+  각 폴더의 파일 이름·개수는 따지지 않는다. unit_id 로 시작하는 줄만 읽는다.
+  판정한 도구·모델·날짜는 같은 폴더의 실행기록.md 에 적는다.
+
 하위 명령 (순서대로) — 출력은 모두 output/new_sites/sentiment/ 아래
-  build      문장 분리 → 문장목록.csv, chunks/추가_NN.txt
-             리뷰가 바뀐 뒤(예: 데이터 추가) 다시 build 하면 묶음 구성과 unit_id 가 달라진다.
-             이때 이전 run 결과·검토표 양식·최종 라벨은 지금 문장과 맞지 않으므로
-             .local/new_sites_감성_이전실행/{시각}/ 으로 옮기고(지우지 않음) 다시 분류하게 한다.
-  validate   34개소 검증셋 548문장을 API 로 분류·채점 → 검증_34개소/  (API)
-  run        묶음을 API 로 분류 → runs/{run1,run2}/                    (API)
-  check      출력 완결성 · 2회 불일치율 · κ
+  build      문장 분리 → 문장목록.csv, chunks/추가_NN.txt (판정할 묶음)
+             리뷰가 바뀐 뒤 다시 build 하면 묶음 구성과 unit_id 가 달라진다. 이때 이전 결과·검토표 양식·
+             최종 라벨은 .local/new_sites_감성_이전실행/{시각}/ 으로 옮기고(지우지 않음), input/ 의 판정
+             파일은 건드리지 않되 이전 문장으로 만든 것으로 기록해 두어 check·review·merge 가 쓰지 않게 한다.
+  check      판정 완결성(덜 된 묶음) · 2회 불일치율 · κ → 재현성.json
+             34개소 검증셋 판정도 덜 된 묶음만 본다 (사람 라벨은 읽지 않는다 — 채점은 validate)
+  validate   34개소 검증셋 판정을 사람 라벨로 채점 → 검증_34개소/채점_{run}.json
   review     사람 검토표 양식(사람검토표.xlsx) 생성: 혼합·`?` 문장 확정용 + 무작위 100문장 블라인드 검증용
   merge      최종 문장·리뷰 라벨과 관광지별 집계
              사람이 채운 검토표는 input/new_sites/사람검토표.xlsx 에서 읽는다
@@ -34,17 +41,14 @@
 
 실행 예
     python src/new_sites/sentiment.py build
-    python src/new_sites/sentiment.py validate
-    python src/new_sites/sentiment.py run --run run1
-    python src/new_sites/sentiment.py run --run run2
     python src/new_sites/sentiment.py check
+    python src/new_sites/sentiment.py validate --run run1
     python src/new_sites/sentiment.py review
     python src/new_sites/sentiment.py merge
 """
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import shutil
 import sys
@@ -53,22 +57,24 @@ from pathlib import Path
 
 import pandas as pd
 
-from common import Checks, anthropic_client, config, read_csv, rel, setup_font, write_csv
+from common import Checks, config, file_sha, read_csv, rel, save_inputs, setup_font, write_csv
 
 sys.path.insert(0, str(config.SENT_SRC))
 sys.path.insert(0, str(config.SENT_SRC / "llm_labeling"))
 from textsplit import split_sentences  # noqa: E402
-from check_output import load_run  # noqa: E402
+from check_output import ID, load_run  # noqa: E402
 
 OUT = config.OUT_SENT
-IN_DIR = OUT / "chunks"                 # LLM 에 보낼 문장 묶음
-RUN_DIR = OUT / "runs"                  # LLM 출력 (run1, run2)
-VAL_DIR = OUT / "검증_34개소"
+IN_DIR = OUT / "chunks"                 # 판정할 문장 묶음 (Claude Code 가 읽는다)
+RUN_DIR = config.SENT_RUNS              # 묶음 판정 run1·run2 (Claude Code 가 쓴 input/ 파일)
+VAL_IN = config.SENT_VAL_RUNS           # 34개소 검증셋 판정 run1·run2 (input/)
+VAL_DIR = OUT / "검증_34개소"            # 검증셋 채점 결과
 REVIEW_XLSX = OUT / "사람검토표.xlsx"    # review 가 만드는 양식
 REVIEW_FILLED = config.REVIEW_FILLED    # 사람이 채운 검토표 (input/new_sites/) — merge 가 읽는다
 ARCHIVE = config.SENT_ARCHIVE
-# 입력 문장이 바뀌면 함께 무효가 되는 결과들 (build 가 옮긴다. input/ 의 채운 검토표는 건드리지 않는다)
-STALE_ON_REBUILD = [RUN_DIR / "run1", RUN_DIR / "run2", RUN_DIR / "재현성.json", REVIEW_XLSX,
+STALE_LIST = OUT / "이전문장_판정파일.json"   # build 가 문장이 바뀐 것을 알았을 때 그 전의 판정 파일 목록
+# 입력 문장이 바뀌면 함께 무효가 되는 결과들 (build 가 옮긴다. input/ 의 판정 파일·검토표는 건드리지 않는다)
+STALE_ON_REBUILD = [OUT / "재현성.json", REVIEW_XLSX,
                     OUT / "블라인드검증_결과.json", OUT / "전수_문장라벨_최종.csv",
                     OUT / "전수_리뷰라벨_최종.csv", OUT / "관광지별_문장감성_최종.csv",
                     OUT / "관광지별_리뷰감성_최종.csv", OUT / "관광지_플랫폼별_문장감성.csv",
@@ -80,6 +86,13 @@ CATS = ["긍정", "부정", "중립", "혼합"]
 def prompt_v1() -> str:
     t = config.PROMPT_V1.read_text(encoding="utf-8")
     return t.split("<<<PROMPT_START>>>", 1)[1].split("<<<PROMPT_END>>>", 1)[0].strip()
+
+
+def prompt_note() -> dict:
+    """판정에 쓴 프롬프트 — 결과 JSON 에 함께 남겨, 프롬프트가 34개소 v1 그대로인지 대조할 수 있게 한다."""
+    import hashlib
+    return {"프롬프트": rel(config.PROMPT_V1).replace("\\", "/"),
+            "프롬프트_sha256": hashlib.sha256(prompt_v1().encode("utf-8")).hexdigest()}
 
 
 # ─────────────────────────────────────────────────────────────
@@ -131,10 +144,24 @@ def build(_):
     print(df.groupby("place").agg(리뷰=("review_id", "nunique"), 문장=("unit_id", "size")).to_string())
 
 
-def archive_stale():
-    """입력 문장이 바뀌었을 때, 이전 문장으로 만든 결과를 옮겨 둔다(지우지 않는다).
+def run_files(base: Path, run: str = "*") -> list[Path]:
+    """판정 폴더(base/run1, base/run2 …) 안에서 load_run() 이 읽는 파일."""
+    if not base.exists():
+        return []
+    return sorted(q for q in base.glob(f"{run}/*") if q.suffix.lower() in (".tsv", ".txt", ".csv"))
 
-    run 은 이미 있는 묶음 출력을 건너뛰므로, 옮기지 않으면 바뀐 묶음에 옛 라벨이 붙는다.
+
+def merge_inputs() -> list[Path]:
+    """merge 가 읽는 입력 — 결과 폴더의 입력기록.json 에 해시를 남긴다."""
+    return [OUT / "문장목록.csv", *run_files(RUN_DIR, "run1"), REVIEW_FILLED]
+
+
+def archive_stale():
+    """입력 문장이 바뀌었을 때, 이전 문장으로 만든 결과를 정리한다.
+
+    판정 파일은 unit_id 와 라벨만 담고 있어서, 묶음이 바뀐 뒤 그대로 읽으면 다른 문장에 옛 라벨이 붙는다.
+    output/ 의 결과는 옮겨 두고(지우지 않는다), input/ 의 판정 파일·채운 검토표는 건드리지 않는 대신
+    경로와 내용 해시를 STALE_LIST 에 적어 check·review·merge 가 쓰지 않게 한다.
     """
     dst = ARCHIVE / datetime.now().strftime("%Y%m%d-%H%M%S")
     moved = []
@@ -145,57 +172,67 @@ def archive_stale():
             moved.append(p.name)
     if moved:
         print(f"  [주의] 입력 문장이 바뀌어 이전 감성 결과 {len(moved)}개({', '.join(moved)})를 "
-              f"{rel(dst)} 로 옮겼습니다.\n         run1·run2 와 review 를 다시 해야 합니다.")
-    if REVIEW_FILLED.exists():
-        print(f"  [주의] {rel(REVIEW_FILLED)} 은 이전 문장으로 만든 검토표입니다. "
-              "다른 곳으로 옮기고 review 로 새 양식을 만들어 다시 채우세요.")
+              f"{rel(dst)} 로 옮겼습니다.")
+    stale = run_files(RUN_DIR) + ([REVIEW_FILLED] if REVIEW_FILLED.exists() else [])
+    if stale:
+        old = json.loads(STALE_LIST.read_text(encoding="utf-8")) if STALE_LIST.exists() else {}
+        old.update({rel(q): file_sha(q) for q in stale})
+        STALE_LIST.write_text(json.dumps(old, ensure_ascii=False, indent=2), encoding="utf-8")
+        print(f"  [주의] input/ 의 판정 파일·검토표 {len(stale)}개는 이전 문장으로 만든 것입니다.\n"
+              "         다른 곳으로 옮기고 새 묶음으로 run1·run2 를 다시 판정한 뒤 review 로 검토표를 새로 만드세요.\n"
+              f"         그 전에는 check·review·merge 가 멈춥니다 (목록: {rel(STALE_LIST)}).")
 
 
-# ─────────────────────────────────────────────────────────────
-# API 실행 (validate · run 공용)
-# ─────────────────────────────────────────────────────────────
-def classify_files(files: list[Path], out_dir: Path, label: str):
-    client = anthropic_client()
-    sysp = prompt_v1()
-    out_dir.mkdir(parents=True, exist_ok=True)
-    log = {"model": config.SENT_MODEL, "effort": config.SENT_EFFORT,
-           "prompt": rel(config.PROMPT_V1),
-           "prompt_sha256": hashlib.sha256(sysp.encode("utf-8")).hexdigest(),
-           "started": datetime.now().isoformat(timespec="seconds"), "chunks": []}
-    for i, f in enumerate(files, 1):
-        dst = out_dir / (f.stem + ".tsv")
-        if dst.exists() and dst.stat().st_size:
-            print(f"  [{label}] {f.name} 이미 있음 — 건너뜀")
-            continue
-        chunk = f.read_text(encoding="utf-8")
-        resp = client.messages.create(
-            model=config.SENT_MODEL, max_tokens=16000,
-            output_config={"effort": config.SENT_EFFORT},
-            messages=[{"role": "user", "content": sysp},
-                      {"role": "assistant", "content": "준비됨"},
-                      {"role": "user", "content": chunk}],
-        )
-        if resp.stop_reason not in ("end_turn", "stop_sequence"):
-            sys.exit(f"{f.name}: stop_reason={resp.stop_reason} — 중단 (부분 결과는 저장하지 않음)")
-        text = "".join(b.text for b in resp.content if b.type == "text")
-        dst.write_text(text.strip() + "\n", encoding="utf-8")
-        log["chunks"].append({"file": f.name, "response_model": resp.model, "id": resp.id,
-                              "input_tokens": resp.usage.input_tokens,
-                              "output_tokens": resp.usage.output_tokens})
-        print(f"  [{label}] {i}/{len(files)} {f.name} → {dst.name}")
-    log["finished"] = datetime.now().isoformat(timespec="seconds")
-    logf = out_dir / "실행기록.json"
-    old = json.loads(logf.read_text(encoding="utf-8")) if logf.exists() else []
-    logf.write_text(json.dumps((old if isinstance(old, list) else [old]) + [log],
-                               ensure_ascii=False, indent=2), encoding="utf-8")
+def stale_left() -> list[str]:
+    """build 가 문장이 바뀐 것을 기록한 뒤에도 그대로 남아 있는 이전 판정 파일·검토표."""
+    if not STALE_LIST.exists():
+        return []
+    old = json.loads(STALE_LIST.read_text(encoding="utf-8"))
+    return [r for r, h in old.items() if (config.REPO / r).exists() and file_sha(config.REPO / r) == h]
 
 
-def run(args):
-    files = sorted(IN_DIR.glob("추가_*.txt"))
-    if not files:
-        sys.exit("입력 묶음이 없습니다. 먼저 build 를 실행하세요.")
-    classify_files(files, RUN_DIR / args.run, args.run)
-    check(args)
+def guard_stale():
+    """build 가 문장이 바뀐 것을 기록한 뒤에도 그 전의 판정 파일이 그대로 남아 있으면 멈춘다."""
+    left = stale_left()
+    if left:
+        sys.exit("[중단] 아래 파일은 지금과 다른 문장으로 만든 판정입니다 (build 가 문장이 바뀐 것을 기록함).\n  "
+                 + "\n  ".join(left[:10]) + (f"\n  … 외 {len(left) - 10}개" if len(left) > 10 else "")
+                 + "\n  다른 곳으로 옮기고 새 묶음으로 다시 판정하세요. 옮기거나 새 판정으로 바꾸면 이 검사는 통과합니다.")
+
+
+def run_note(d: Path) -> str:
+    """판정 폴더의 실행기록.md 에서 도구·모델·날짜 줄을 읽는다."""
+    f = d / "실행기록.md"
+    if not f.exists():
+        return "실행기록.md 없음"
+    lines = [x.strip().lstrip("-*# ").strip() for x in f.read_text(encoding="utf-8-sig").splitlines()
+             if not x.strip().startswith("```")]
+    return " · ".join(x for x in lines if x)[:500]
+
+
+def chunk_ids(folder: Path, pattern: str = "*.txt") -> dict[str, set[str]]:
+    """묶음 파일별 unit_id — 어느 묶음이 아직 판정되지 않았는지 알려 줄 때 쓴다."""
+    out = {}
+    for f in sorted(folder.glob(pattern)):
+        out[f.stem] = {m.group(1) for ln in f.read_text(encoding="utf-8").splitlines()
+                       if (m := ID.match(ln.strip()))}
+    return out
+
+
+def run_complete(base: Path, name: str, exp: set[str]) -> bool:
+    """판정 폴더 base/name 이 기대 unit_id 를 모두 담고 형식 오류가 없는가."""
+    rows, bad, dup, _ = load_run(name, base=base)
+    return bool(rows) and exp <= set(rows) and not bad and not dup
+
+
+def sentences_ready() -> bool:
+    """추가 관광지 run1 판정이 지금 문장목록과 맞게 끝났는가 (run_all.py 가 review·merge 전에 본다)."""
+    f = OUT / "문장목록.csv"
+    return f.exists() and not stale_left() and run_complete(RUN_DIR, "run1", set(read_csv(f)["unit_id"]))
+
+
+def validation_ids() -> set[str]:
+    return set().union(*chunk_ids(config.BASE_SENT_CHUNKS).values())
 
 
 # ─────────────────────────────────────────────────────────────
@@ -222,11 +259,12 @@ def kappa(a: pd.Series, b: pd.Series) -> float:
 
 
 def validate(args):
-    files = sorted(config.BASE_SENT_CHUNKS.glob("*.txt"))
     run_name = args.run
-    if not args.score_only:
-        classify_files(files, VAL_DIR / run_name, f"검증 {run_name}")
-    rows, bad, dup, _ = load_run(run_name, base=VAL_DIR)
+    rows, bad, dup, _ = load_run(run_name, base=VAL_IN)
+    if not rows:
+        sys.exit(f"{rel(VAL_IN / run_name)} 에 판정 파일이 없습니다. "
+                 "input/new_sites/claude_지시문/감성_검증.md 대로 판정해 저장한 뒤 다시 실행하세요.")
+    VAL_DIR.mkdir(parents=True, exist_ok=True)
     gold = pd.concat([read_csv(config.BASE_SENT_GOLD / f)
                       for f in ["검증셋_본_확정.csv", "검증셋_보강_확정.csv"]])
     gold = gold[gold["split"] == "TEST"].reset_index(drop=True)
@@ -241,7 +279,7 @@ def validate(args):
     s_drop = macro(main.loc[main.pred != "혼합", "pred"], main.loc[main.pred != "혼합", "label"])
     neg = aug[aug["label"] == "부정"]
     neg_rec = float((neg["pred"] == "부정").mean()) if len(neg) else float("nan")
-    res = {"run": run_name, "model": config.SENT_MODEL, "effort": config.SENT_EFFORT,
+    res = {"run": run_name, "판정": run_note(VAL_IN / run_name), **prompt_note(),
            "본_TEST": {"n": s_main["n"], "macro_f1": s_main["macro_f1"], "accuracy": s_main["accuracy"],
                       "class_f1": {c: s_main["per"][c]["F1"] for c in LABELS},
                       "혼합": int((main.pred == "혼합").sum()),
@@ -258,52 +296,80 @@ def validate(args):
     print("  클래스별 F1: " + " · ".join(f"{c} {s_main['per'][c]['F1']:.3f}" for c in LABELS))
     print(f"  보강 부정 재현율: {neg_rec:.3f} ({len(neg)}문장)")
     print("  34개소(ChatGPT 웹 UI): macro-F1 0.906~0.908 · 부정 재현율 0.82~0.91 · 기준선 0.579")
-    a, b = load_run("run1", base=VAL_DIR)[0], load_run("run2", base=VAL_DIR)[0]
+    a, b = load_run("run1", base=VAL_IN)[0], load_run("run2", base=VAL_IN)[0]
     both = [k for k in a if k in b]
     if both:
         sa, sb = pd.Series([a[k].rstrip("?") for k in both]), pd.Series([b[k].rstrip("?") for k in both])
         print(f"  검증셋 2회 불일치: {(sa != sb).sum()}/{len(both)} = {(sa != sb).mean():.2%} · κ {kappa(sa, sb):.3f}")
 
 
+def report_run(ck, label: str, base: Path, name: str, exp: set[str], chunks: dict, guide: str):
+    """판정 폴더 하나의 완결성을 출력한다. 판정이 없으면 None."""
+    rows, bad, dup, noise = load_run(name, base=base)
+    if not rows:
+        print(f"  [{label} {name}] 아직 없음 — {rel(base / name)}/ 에 묶음 {len(chunks)}개의 판정을 저장하세요 "
+              f"(input/new_sites/claude_지시문/{guide})")
+        return None
+    miss = exp - set(rows)
+    extra = set(rows) - exp
+    left = [c for c, ids in chunks.items() if ids - set(rows)]
+    ck(f"{label} {name} 완결", not miss and not extra and not bad and not dup,
+       f"{len(rows)}/{len(exp)} · 누락 {len(miss)} · 없는 id {len(extra)} · 라벨이상 {len(bad)} "
+       f"· 중복불일치 {len(dup)} · 무시한 줄 {noise}"
+       + (f" · 덜 된 묶음 {', '.join(left)}" if left else ""), fatal=False)
+    for x in (bad + dup)[:5]:
+        print("     !", x)
+    print(f"     판정: {run_note(base / name)}")
+    lab = pd.Series([v.rstrip("?") for v in rows.values()])
+    print("     분포: " + " · ".join(f"{k} {v:.1%}" for k, v in lab.value_counts(normalize=True).items())
+          + f" · ? {sum(v.endswith('?') for v in rows.values())}건")
+    return rows
+
+
 def check(_):
+    guard_stale()
     src = read_csv(OUT / "문장목록.csv")
     exp = set(src["unit_id"])
+    chunks = chunk_ids(IN_DIR, "추가_*.txt")
+    ck = Checks("감성분석 판정 점검")
     runs = {}
-    ck = Checks("감성분석 출력 점검")
     for name in ("run1", "run2"):
-        rows, bad, dup, noise = load_run(name, base=RUN_DIR)
-        if not rows:
-            print(f"  [{name}] 아직 없음")
-            continue
-        miss = exp - set(rows)
-        extra = set(rows) - exp
-        ck(f"{name} 완결", not miss and not extra and not bad and not dup,
-           f"{len(rows)}/{len(exp)} · 누락 {len(miss)} · 없는 id {len(extra)} · 라벨이상 {len(bad)} "
-           f"· 중복불일치 {len(dup)} · 무시한 줄 {noise}", fatal=False)
-        runs[name] = rows
-        lab = pd.Series([v.rstrip("?") for v in rows.values()])
-        print("     분포: " + " · ".join(f"{k} {v:.1%}" for k, v in lab.value_counts(normalize=True).items())
-              + f" · ? {sum(v.endswith('?') for v in rows.values())}건")
+        rows = report_run(ck, "추가 관광지", RUN_DIR, name, exp, chunks, "감성_판정.md")
+        if rows:
+            runs[name] = rows
     if len(runs) == 2:
         ids = sorted(set(runs["run1"]) & set(runs["run2"]))
         a = pd.Series([runs["run1"][i].rstrip("?") for i in ids])
         b = pd.Series([runs["run2"][i].rstrip("?") for i in ids])
         flip = int((((a == "긍정") & (b == "부정")) | ((a == "부정") & (b == "긍정"))).sum())
         res = {"불일치": int((a != b).sum()), "문장": len(ids), "불일치율": float((a != b).mean()),
-               "kappa": kappa(a, b), "긍부_뒤집힘": flip}
-        (RUN_DIR / "재현성.json").write_text(json.dumps(res, ensure_ascii=False, indent=2), encoding="utf-8")
+               "kappa": kappa(a, b), "긍부_뒤집힘": flip,
+               "run1": run_note(RUN_DIR / "run1"), "run2": run_note(RUN_DIR / "run2"), **prompt_note()}
+        (OUT / "재현성.json").write_text(json.dumps(res, ensure_ascii=False, indent=2), encoding="utf-8")
         print(f"\n  2회 실행 불일치 {res['불일치']}/{res['문장']} = {res['불일치율']:.2%} · κ {res['kappa']:.3f} "
               f"· 긍↔부 뒤집힘 {flip}  (34개소: 4.20% · κ 0.936)")
+
+    # 34개소 검증셋 — 덜 된 묶음만 본다. 사람 라벨은 읽지 않는다 (채점은 validate).
+    vchunks = chunk_ids(config.BASE_SENT_CHUNKS)
+    vexp = set().union(*vchunks.values())
+    print()
+    for name in ("run1", "run2"):
+        if report_run(ck, "34개소 검증셋", VAL_IN, name, vexp, vchunks, "감성_검증.md"):
+            print(f"     채점: python src/new_sites/sentiment.py validate --run {name}")
 
 
 # ─────────────────────────────────────────────────────────────
 # review — 사람 검토표
 # ─────────────────────────────────────────────────────────────
 def review(args):
+    guard_stale()
     src = read_csv(OUT / "문장목록.csv")
     rows = load_run("run1", base=RUN_DIR)[0]
     if not rows:
-        sys.exit("run1 결과가 없습니다.")
+        sys.exit(f"run1 판정이 없습니다 ({rel(RUN_DIR / 'run1')}/).")
+    miss = set(src["unit_id"]) - set(rows)
+    if miss:
+        sys.exit(f"run1 판정이 {len(miss)}문장 빠져 있습니다. check 로 덜 된 묶음을 확인하세요.")
     src["모델라벨"] = src["unit_id"].map(rows)
     ctx = src.groupby("review_id")["sent"].apply(lambda s: " / ".join(s))
     src["리뷰전문"] = src["review_id"].map(ctx)
@@ -364,13 +430,15 @@ def agg(df, key, col):
 
 
 def merge(_):
+    guard_stale()
     ck = Checks("감성분석 최종 병합")
     src = read_csv(OUT / "문장목록.csv")
     rows, bad, dup, _ = load_run("run1", base=RUN_DIR)
-    ck("run1 출력 이상 없음", not bad and not dup)
+    ck("run1 판정 이상 없음", bool(rows) and not bad and not dup,
+       "" if rows else f"{rel(RUN_DIR / 'run1')}/ 에 판정이 없습니다")
     src["label"] = src["unit_id"].map(rows).str.rstrip("?")
-    ck("예측 누락 없음", src["label"].notna().all(), f"누락 {src['label'].isna().sum()}")
-    src["출처"] = f"API 예측 ({config.SENT_MODEL})"
+    ck("판정 누락 없음", src["label"].notna().all(), f"누락 {src['label'].isna().sum()}")
+    src["출처"] = "LLM 판정 (run1)"
 
     hard_done = 0
     if not REVIEW_FILLED.exists() and REVIEW_XLSX.exists():
@@ -422,6 +490,7 @@ def merge(_):
                f"{s['n']}문장 · 정확도 {s['accuracy']:.3f} · macro-F1 {s['macro_f1']:.3f}")
 
     plot(by_sent)
+    save_inputs(OUT, merge_inputs())
     print("\n  관광지별 문장 감성")
     print(by_sent.to_string(float_format=lambda x: f"{x:.1%}"))
     print("\n  관광지별 리뷰 감성")
@@ -473,9 +542,6 @@ def main():
     sub.add_parser("build")
     v = sub.add_parser("validate")
     v.add_argument("--run", default="run1")
-    v.add_argument("--score-only", action="store_true", help="API 호출 없이 저장된 출력만 채점")
-    r = sub.add_parser("run")
-    r.add_argument("--run", default="run1", choices=["run1", "run2"])
     sub.add_parser("check")
     rv = sub.add_parser("review")
     rv.add_argument("--sample", type=int, default=100)
@@ -483,7 +549,7 @@ def main():
     sub.add_parser("merge")
     args = ap.parse_args()
     OUT.mkdir(parents=True, exist_ok=True)
-    {"build": build, "validate": validate, "run": run, "check": check,
+    {"build": build, "validate": validate, "check": check,
      "review": review, "merge": merge}[args.cmd](args)
 
 

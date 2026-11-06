@@ -3,7 +3,8 @@
 
 입력
   output/collect/naver/{관광지명}_naver_reviews.csv     collect_naver.py · import_har.py 결과
-  output/collect/google/{관광지명}_google_reviews.csv   src/collect/google_reviews.py 결과 (있을 때만 읽는다)
+  output/collect/google/{관광지명}_google_reviews.csv   config.PLATFORMS 에 '구글'을 넣었을 때만 읽는다
+                                                        (추가 관광지는 구글 리뷰가 없어 네이버만 쓴다)
   input/new_sites/비식별_치환목록.csv                    사람이 실명으로 확인한 표현 (있을 때만)
 출력
   output/new_sites/추가관광지_리뷰데이터.csv    place, platform, reviewId, rating, body, date, visitCount, tags
@@ -100,7 +101,7 @@ def load_naver(name: str) -> pd.DataFrame:
 
 def load_google(name: str) -> pd.DataFrame:
     p = config.RAW_GOOGLE / f"{name}_google_reviews.csv"
-    if not p.exists():
+    if "구글" not in config.PLATFORMS or not p.exists():
         return pd.DataFrame()
     d = read_csv(p, dtype=str, keep_default_na=False)
     body = d["리뷰본문"] if "리뷰본문" in d else pd.Series([""] * len(d))
@@ -147,7 +148,8 @@ def make_demo_raw():
     assert config.DEMO, "--demo 는 IMSIL_DEMO=1 과 함께 써야 합니다 (실제 output/ 보호)"
     base = read_csv(config.BASE_DATASET)
     config.RAW_NAVER.mkdir(parents=True, exist_ok=True)
-    config.RAW_GOOGLE.mkdir(parents=True, exist_ok=True)
+    if "구글" in config.PLATFORMS:
+        config.RAW_GOOGLE.mkdir(parents=True, exist_ok=True)
     for tgt, src in config.DEMO_SOURCES.items():
         d = base[base["place"] == src]
         n = d[d["platform"] == "네이버"]
@@ -162,11 +164,12 @@ def make_demo_raw():
         }).to_csv(config.RAW_NAVER / f"{tgt}_naver_reviews.csv", index=False, encoding="utf-8-sig")
         (config.RAW_NAVER / f"{tgt}_수집정보.json").write_text(json.dumps(
             {"place": tgt, "collected_at": "2026-08-11 00:00:00"}), encoding="utf-8")
-        g = d[d["platform"] == "구글"]
-        pd.DataFrame({
-            "관광지명": tgt, "플랫폼": "구글", "리뷰ID": g["reviewId"], "작성자닉네임": "demo",
-            "평점": g["rating"], "작성일": g["date"] + " 12:00:00", "리뷰본문": g["body"].fillna(""),
-        }).to_csv(config.RAW_GOOGLE / f"{tgt}_google_reviews.csv", index=False, encoding="utf-8-sig")
+        g = d[d["platform"] == "구글"] if "구글" in config.PLATFORMS else d.iloc[:0]
+        if len(g):
+            pd.DataFrame({
+                "관광지명": tgt, "플랫폼": "구글", "리뷰ID": g["reviewId"], "작성자닉네임": "demo",
+                "평점": g["rating"], "작성일": g["date"] + " 12:00:00", "리뷰본문": g["body"].fillna(""),
+            }).to_csv(config.RAW_GOOGLE / f"{tgt}_google_reviews.csv", index=False, encoding="utf-8-sig")
         print(f"  [demo] {src} → {tgt}: 네이버 {len(n)} · 구글 {len(g)}")
 
 
@@ -183,15 +186,14 @@ def main():
         nv, gg = load_naver(name), load_google(name)
         counts.append((name, len(nv), len(gg)))
         parts += [x for x in (nv, gg) if len(x)]
-    for name, a, b in counts:
-        print(f"  {name}: 네이버 {a} · 구글 {b}")
+    print(f"  분석 플랫폼: {', '.join(config.PLATFORMS)} (config.PLATFORMS)")
 
     ck = Checks("통합 리뷰 데이터")
     ck("수집 원본 존재", bool(parts), f"{rel(config.RAW_NAVER)} 에 수집 결과가 없습니다" if not parts else "")
     for name, a, b in counts:
-        ck(f"{name} 수집 원본", a + b > 0, f"네이버 {a} · 구글 {b}", fatal=False)
-        ck(f"{name} 양 플랫폼 수집", a > 0 and b > 0,
-           "" if a and b else "한쪽 플랫폼이 비어 있음", fatal=False)
+        n = {"네이버": a, "구글": b}
+        ck(f"{name} 수집 원본", all(n[p] > 0 for p in config.PLATFORMS),
+           " · ".join(f"{p} {n[p]}" for p in config.PLATFORMS), fatal=False)
 
     df = pd.concat(parts, ignore_index=True)
     n0 = len(df)
@@ -206,7 +208,7 @@ def main():
     if end:
         keep &= df["date"] <= end
     ck("DATE_END 고정", end is not None,
-       "config.DATE_END 가 None — 수집일 전날로 고정해 주세요", fatal=False)
+       config.DATE_END if end else "config.DATE_END 가 None — 수집일 전날로 고정해 주세요", fatal=False)
     print(f"  기간 필터 {config.DATE_START} ~ {config.DATE_END or '(상한 없음)'}: "
           f"{len(df)} → {int(keep.sum())}")
     df = df[keep].copy()

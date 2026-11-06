@@ -6,7 +6,7 @@
    리뷰 1건 = 트랜잭션 1개, 지지도·신뢰도·향상도 계산 방식과 기본 임계값이 34개소와 같다.
    관광지 단위 규칙이 핵심이므로 --by-place 로 돌리고, 리뷰 수가 적은 관광지도 포함되게
    --min-place-transactions 만 낮춘다(스크립트 기본 100, 34개소 보고서 결과는 50 → 여기 기본 20).
-   LLM 키워드 정규화(동의어 통합·기능어 제거)는 34개소와 같이 켜는 것이 기본이다.
+   34개소 보고서 4장과 같이 --no-llm(원본 키워드 그대로)으로 계산한다. API 를 부르지 않는다.
 
 2) 동시출현 네트워크 (보고서 그림용)
    관광지별 빈도 상위 키워드 사이에 '한 리뷰에 함께 나온 리뷰 수'를 가중치로 하는 연결망을 그린다.
@@ -18,8 +18,7 @@
       output/new_sites/association/그림_{관광지}_키워드네트워크.png
 
 실행
-    python src/new_sites/association.py            # LLM 정규화 포함 (API 키 필요)
-    python src/new_sites/association.py --no-llm   # API 없이
+    python src/new_sites/association.py
 """
 from __future__ import annotations
 
@@ -39,13 +38,11 @@ MIN_EDGE = 3        # 이 리뷰 수 미만으로 함께 나온 쌍은 선을 �
 SEED = 20261102
 
 
-def run_rules(no_llm: bool, min_tx: int):
+def run_rules(min_tx: int):
     out = config.OUT_ASSOC / "연관관계_분석결과.csv"
     cmd = [sys.executable, str(config.ASSOC_SCRIPT),
            "--input", str(config.KEYWORD_DATA), "--output", str(out),
-           "--by-place", "--min-place-transactions", str(min_tx)]
-    if no_llm:
-        cmd.append("--no-llm")
+           "--no-llm", "--by-place", "--min-place-transactions", str(min_tx)]
     print("실행:", " ".join(rel(c) if "/" in c else c for c in cmd[1:]))
     subprocess.run(cmd, check=True, cwd=config.REPO)
     return out
@@ -106,7 +103,6 @@ def draw(nodes: pd.DataFrame, edges: pd.DataFrame):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--no-llm", action="store_true", help="LLM 키워드 정규화 없이 계산")
     ap.add_argument("--min-place-transactions", type=int, default=20)
     args = ap.parse_args()
 
@@ -114,7 +110,7 @@ def main():
     ck("키워드 전처리 데이터 존재", config.KEYWORD_DATA.exists(), rel(config.KEYWORD_DATA))
     config.OUT_ASSOC.mkdir(parents=True, exist_ok=True)
 
-    out = run_rules(args.no_llm, args.min_place_transactions)
+    out = run_rules(args.min_place_transactions)
     rules = read_csv(out)
     scopes = rules["scope"].value_counts().to_dict() if len(rules) else {}
     ck("연관규칙 산출", len(rules) > 0, f"범위별 규칙 수 {scopes}", fatal=False)

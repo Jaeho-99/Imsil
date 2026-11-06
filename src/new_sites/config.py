@@ -7,10 +7,15 @@ src/new_sites/ 의 모든 스크립트가 이 파일을 읽으므로 값을 바�
 
 수집 전에 채워야 하는 값
   - TARGETS[*]["naver_place_id"] : 네이버 지도 URL의 /place/{숫자} 부분 (2026-11-03 입력 완료)
-  - 추가 관광지는 구글에 리뷰가 없어 네이버만 수집한다 (2026-11-05 결정).
-    output/collect/google/ 에 같은 이름의 구글 수집 파일이 있으면 build_dataset.py 가 함께 읽는다.
+  - PLATFORMS : 추가 관광지는 구글에 리뷰가 없어 네이버만 쓴다 (2026-11-05 결정).
 수집 후에 고정해야 하는 값
   - DATE_END : 수집일 전날로 고정한다. 34개소 분석(2026-08-10)과 같은 방식이다.
+
+API 를 쓰지 않는다 (2026-11-06)
+  LLM 이 판정하는 단계(번역·문장 감성·만족·불만 요인)는 코드가 판정 대상을 output/ 에 내보내고,
+  사람이 Claude Code 에서 지시문대로 판정해 결과를 input/new_sites/ 에 저장하면, 코드가 그 파일을 읽는다.
+  34개소 분석도 같은 방식이었다(감성: ChatGPT 웹 UI, 요인: Claude Code 대화).
+  지시문은 input/new_sites/claude_지시문/, 실행 순서는 docs/new_sites.md 에 있다.
 """
 import os
 import sys
@@ -42,8 +47,11 @@ TARGETS = [
     {
         "name": "오수의견국민여가캠핑장",
         "naver_place_id": "2006533162",    # m.place.naver.com/place/2006533162
+        # Kiwi 는 '국민여가캠핑장'을 국민/여가/캠핑/장으로 쪼개거나, 붙여 쓴 이름을 한 토큰으로 남긴다 (2026-11-06 실제 리뷰로 확인).
+        # '캠핑'은 이 관광지의 핵심 활동어라 남긴다 (34개소 임실치즈테마파크에서 '치즈'를 남긴 것과 같은 기준).
         "place_stopwords": {"오수", "의견", "오수의견", "국민여가", "캠핑장",
-                            "국민여가캠핑장", "임실"},
+                            "국민여가캠핑장", "임실", "국민", "여가",
+                            "오수의견국민여가캠핑장", "오수의견캠핑장"},
     },
 ]
 TARGET_NAMES = [t["name"] for t in TARGETS]
@@ -61,6 +69,9 @@ DATE_START = "2022-01-01"
 DATE_END = "2026-11-02"  # 첫 수집일(2026-11-03) 전날. 플랫폼마다 수집일이 달라도 같은 기간을 보도록 고정
                          # None 이면 상한 없이 쓰고 경고를 낸다.
 
+# 분석에 쓰는 플랫폼. 구글을 넣으면 output/collect/google/ 의 같은 이름 수집 파일도 읽는다.
+PLATFORMS = ["네이버"]
+
 # 네이버 리뷰의 날짜로 쓸 필드. created(작성일)가 구글의 작성일과 같은 의미다.
 NAVER_DATE_FIELD = "created"
 
@@ -75,15 +86,19 @@ RAW_NAVER = DEMO_DIR / "collect" / "naver" if DEMO else paths.NAVER_RAW   # {ID}
 RAW_GOOGLE = DEMO_DIR / "collect" / "google" if DEMO else paths.GOOGLE_RAW
 ID_MAP = RAW_NAVER / "추가관광지_리뷰ID_대응표.csv"   # 원본 ID ↔ 가명 ID (git 제외)
 
-IN = DEMO_DIR / "input" if DEMO else paths.NEW_IN          # 사람이 만든 입력 (input/new_sites/)
-MASK_RULES = IN / "비식별_치환목록.csv"                      # 실명으로 확인한 표현 → ○○○
+# 사람·Claude Code 가 만든 입력 (input/new_sites/). 코드는 읽기만 한다.
+IN = DEMO_DIR / "input" if DEMO else paths.NEW_IN
+MASK_RULES = IN / "비식별_치환목록.csv"                      # 실명으로 확인한 표현 → ○○○ (git 제외)
+TRANSLATE_DONE = IN / "번역결과.csv"                         # 외국어 리뷰 번역 (Claude Code)
+SENT_RUNS = IN / "sentiment" / "runs"                       # 문장 감성 판정 run1·run2 (Claude Code)
+SENT_VAL_RUNS = IN / "sentiment" / "검증_34개소"              # 34개소 검증셋 판정 run1·run2 (Claude Code)
 REVIEW_FILLED = IN / "사람검토표.xlsx"                       # 감성 사람 검토표 (채운 것)
+FACTOR_ANN = IN / "satisfaction" / "annotations.jsonl"      # 만족·불만 요인 판정 (Claude Code)
 
 OUT = DEMO_DIR / "new_sites" if DEMO else paths.NEW_OUT    # output/new_sites/
 DATASET = OUT / "추가관광지_리뷰데이터.csv"                   # 통합 원본 (비식별)
 PREPROCESSED = OUT / "추가관광지_리뷰데이터_1차전처리.csv"
-TRANSLATE_TODO = OUT / "번역대상.csv"                       # 원문을 담은 중간 파일 (git 제외)
-TRANSLATE_DONE = OUT / "번역결과.csv"                       # 번역 결과 (커밋해 재현에 쓴다)
+TRANSLATE_TODO = OUT / "번역대상.csv"                       # 번역할 외국어 리뷰 (git 제외)
 OUT_KEYWORD = OUT / "keyword"
 KEYWORD_DATA = OUT_KEYWORD / "추가관광지_리뷰데이터_키워드전처리완료.csv"
 OUT_ASSOC = OUT / "association"
@@ -99,7 +114,9 @@ BASE_SENT_REVIEW = paths.SENT_FINAL / "전수_리뷰라벨_최종.csv"
 BASE_SENT_SENTENCE = paths.SENT_FINAL / "전수_문장라벨_최종.csv"
 BASE_SENT_CHUNKS = paths.SENT_OUT / "llm_labeling" / "chunks"     # 34개소 검증셋 548문장 묶음
 BASE_SENT_GOLD = paths.SENT_OUT / "labeling" / "확정"              # 34개소 사람 확정 라벨
+BASE_SENT_RUNS = paths.SENT_IN / "llm_labeling" / "llm_runs"       # 34개소 검증셋 ChatGPT 판정 (시험 실행용)
 BASE_FACTOR = paths.SATIS_RESULT
+BASE_FACTOR_IN = paths.SATIS_IN                                    # 34개소 요인 판정 pending·annotations (시험 실행용)
 PROMPT_V1 = paths.SENT_IN / "llm_labeling" / "프롬프트_v1.md"
 
 # 34개소 코드 (고치지 않고 불러 쓴다)
@@ -107,7 +124,6 @@ SENT_SRC = paths.SRC / "sentiment"                       # textsplit.py, llm_lab
 COLLECT_SRC = paths.SRC / "collect"                      # naver_reviews.py
 ASSOC_SCRIPT = paths.SRC / "association" / "analyze_association.py"
 FACTOR_SCRIPT = paths.SRC / "satisfaction" / "analyze_satisfaction.py"
-ENV_FILE = paths.ENV_FILE
 
 # ─────────────────────────────────────────────────────────────
 # 키워드 분석 — 34개소 키워드 분석(src/keyword/keyword_analysis.py)과 같은 값
@@ -118,15 +134,8 @@ COMMON_STOPWORDS = {"곳", "장소", "여기", "하다", "되다", "있다", "�
 ANALYSIS_STOPWORDS = {"좋다", "많다", "같다", "생각", "다녀오다", "나오다", "추천"}
 
 # ─────────────────────────────────────────────────────────────
-# LLM — 감성(프롬프트 v1)·요인 추출·번역
+# 감성분석 — 34개소 전수 적용과 같은 조건 (프롬프트 v1, 150문장 묶음, 독립 2회 판정)
 # ─────────────────────────────────────────────────────────────
-# 요인 추출: 34개소와 같은 모델로 돌려야 두 결과를 나란히 놓을 수 있다.
-FACTOR_MODEL = "claude-opus-5"           # src/satisfaction/analyze_satisfaction.py 기본값
-FACTOR_EFFORT = "medium"
-# 감성분류·번역: 프롬프트 v1을 API로 실행. 현재 모델은 temperature 를 받지 않으므로
-# 34개소와 마찬가지로 독립 2회 실행의 불일치율로 변동성을 보고한다.
-SENT_MODEL = "claude-opus-5-5"
-SENT_EFFORT = "high"
 SENT_CHUNK = 150                 # 34개소 전수 적용 묶음 크기와 같다
 SENT_SEED = 20261102
 SENT_UNIT_PREFIX = "ADD"         # 문장 unit_id: ADD-00001 (check_output.py 정규식과 호환)

@@ -19,7 +19,9 @@ from datetime import datetime
 
 import pandas as pd
 
-from common import config, read_csv, rel, setup_font, write_csv
+import satisfaction as satis_step
+import sentiment as sent_step
+from common import config, inputs_changed, read_csv, rel, setup_font, write_csv
 
 OUT = config.OUT_SUMMARY
 L: list[str] = []
@@ -151,8 +153,11 @@ def sentiment():
     h("4. 감성분석")
     f = config.OUT_SENT / "관광지별_문장감성_최종.csv"
     if not f.exists():
-        L.append("미실행 — sentiment.py ... merge.")
+        L.append("미실행 — 판정(input/new_sites/sentiment/runs/run1/) 뒤 `sentiment.py merge`.")
         return
+    if inputs_changed(config.OUT_SENT, sent_step.merge_inputs()):
+        L.append("> ⚠ 이 결과를 만든 뒤 문장 목록·판정·검토표가 바뀌었습니다. "
+                 "`sentiment.py merge` 를 다시 실행해야 아래 수치가 지금 판정과 맞습니다.\n")
     s = read_csv(f)
     rv = read_csv(config.OUT_SENT / "관광지별_리뷰감성_최종.csv")
     base_s = read_csv(config.BASE_SENT_SENTENCE)
@@ -181,20 +186,22 @@ def sentiment():
     table(pd.DataFrame(rows), pct)
     L.append("문장 비율은 리뷰 문장의 구성이지 방문객 비율이 아니다. 중립은 평가어가 없는 문장이다 "
              "(34개소 보고서 3장·6.6과 같은 해석 원칙). 30문장 미만 관광지의 비율은 경향만 본다.\n")
-    v = config.OUT_SENT / "검증_34개소" / "채점_run1.json"
-    if v.exists():
-        j = json.loads(v.read_text(encoding="utf-8"))
-        L.append(f"- 방법 검증: 34개소 사람 검증셋 본 TEST {j['본_TEST']['n']}문장에서 "
+    vals = [json.loads(v.read_text(encoding="utf-8"))
+            for v in sorted((config.OUT_SENT / "검증_34개소").glob("채점_run*.json"))]
+    for j in vals:
+        L.append(f"- 방법 검증 ({j['run']}): 34개소 사람 검증셋 본 TEST {j['본_TEST']['n']}문장에서 "
                  f"macro-F1 **{j['본_TEST']['macro_f1']:.3f}** (정확도 {j['본_TEST']['accuracy']:.3f}), "
                  f"보강셋 부정 재현율 {j['보강_부정재현율']['recall']:.3f}. "
-                 f"34개소(ChatGPT 웹 UI) 0.906 · 0.82~0.91, 다수 클래스 기준선 0.579. 모델 `{j['model']}`.")
-    else:
-        L.append("- 방법 검증: 미실행 — `sentiment.py validate` (34개소 검증셋 재채점).")
-    r = config.OUT_SENT / "runs" / "재현성.json"
+                 f"34개소(ChatGPT 웹 UI) 0.906~0.908 · 0.82~0.91, 다수 클래스 기준선 0.579. 판정: {j['판정']}.")
+    if not vals:
+        L.append("- 방법 검증: 미실행 — 34개소 검증셋을 같은 도구로 판정한 뒤 `sentiment.py validate`.")
+    r = config.OUT_SENT / "재현성.json"
     if r.exists():
         j = json.loads(r.read_text(encoding="utf-8"))
         L.append(f"- 재현성: 독립 2회 실행 불일치 {j['불일치']}/{j['문장']} = {j['불일치율']:.2%}, "
                  f"κ {j['kappa']:.3f}, 긍↔부 뒤집힘 {j['긍부_뒤집힘']}건 (34개소 4.20% · κ 0.936).")
+    else:
+        L.append("- 재현성: 미실행 — run2 판정 뒤 `sentiment.py check`.")
     b = config.OUT_SENT / "블라인드검증_결과.json"
     if b.exists():
         j = json.loads(b.read_text(encoding="utf-8"))
@@ -206,8 +213,11 @@ def factors():
     h("5. 만족·불만 요인")
     f = config.OUT_FACTOR / "관광지별_요인집계.csv"
     if not f.exists():
-        L.append("미실행 — satisfaction.py.")
+        L.append("미실행 — 판정(input/new_sites/satisfaction/annotations.jsonl) 뒤 `satisfaction.py merge`.")
         return
+    if inputs_changed(config.OUT_FACTOR, satis_step.merge_inputs()):
+        L.append("> ⚠ 이 결과를 만든 뒤 리뷰 데이터나 판정이 바뀌었습니다. "
+                 "`satisfaction.py merge` 를 다시 실행해야 아래 수치가 지금 판정과 맞습니다.\n")
     t = read_csv(f)
     ex = read_csv(config.OUT_FACTOR / "요인별_대표원문.csv") if \
         (config.OUT_FACTOR / "요인별_대표원문.csv").exists() else pd.DataFrame()
