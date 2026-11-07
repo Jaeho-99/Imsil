@@ -87,11 +87,16 @@ def load_targets():
 
 
 def read_annotations(t: pd.DataFrame):
-    """input/ 의 판정 파일을 읽어 검증한다. 돌려주는 값: ({rid: 판정}, 오류 목록)."""
+    """input/ 의 판정 파일을 읽어 검증한다. 돌려주는 값: ({rid: 판정}, 오류 목록, 대상 밖 리뷰 목록).
+
+    대상 밖 리뷰: 리뷰ID 형식은 맞지만 지금 판정 대상에 없는 줄. 분석 기간(config.DATE_END)을 줄이면
+    기간 밖 리뷰의 판정 줄이 남는다. 리뷰ID 는 대응표로 고정되어 있어 남은 리뷰의 판정은 그대로 쓰고,
+    기간 밖 줄은 지우지 않고 읽지만 않는다 (기간을 다시 넓히면 다시 쓰인다).
+    """
     body = {r: norm(b) for r, b in zip(t["reviewId"], t["body"])}
-    ann, errs, seen = {}, [], Counter()
+    ann, errs, outside, seen = {}, [], [], Counter()
     if not ANN.exists():
-        return ann, errs
+        return ann, errs, outside
     for ln, line in enumerate(ANN.read_text(encoding="utf-8-sig").splitlines(), 1):
         line = line.strip()
         if not line:
@@ -102,6 +107,9 @@ def read_annotations(t: pd.DataFrame):
             errs.append(f"{ln}번째 줄: JSON 이 아님 — {e}")
             continue
         rid = a.get("rid") if isinstance(a, dict) else None
+        if isinstance(rid, str) and re.fullmatch(r"RV\d{5}", rid) and rid not in body:
+            outside.append(rid)
+            continue
         if rid not in body:
             errs.append(f"{ln}번째 줄: 판정 대상에 없는 리뷰 '{rid}'")
             continue
@@ -139,7 +147,7 @@ def read_annotations(t: pd.DataFrame):
                     bad = True
         if not bad:
             ann[rid] = a
-    return ann, errs
+    return ann, errs, outside
 
 
 def merge_inputs():
@@ -152,7 +160,7 @@ def complete() -> bool:
     if not config.PREPROCESSED.exists():
         return False
     _, t = load_targets()
-    ann, errs = read_annotations(t)
+    ann, errs, outside = read_annotations(t)
     return not errs and len(t) > 0 and bool(t["reviewId"].isin(ann).all())
 
 
@@ -170,9 +178,12 @@ def ranges(nums: list[int]) -> str:
     return ", ".join(out)
 
 
-def status(t: pd.DataFrame, ann: dict, errs: list):
+def status(t: pd.DataFrame, ann: dict, errs: list, outside: list = ()):
     left = [i for i, r in enumerate(t["reviewId"], 1) if r not in ann]
     print(f"\n  판정 {len(ann)}/{len(t)}건 · 남은 리뷰 {len(left)}건 · 오류 {len(errs)}건  ({rel(ANN)})")
+    if outside:
+        print(f"  지금 판정 대상이 아닌 리뷰의 줄 {len(outside)}개는 읽지 않습니다 "
+              f"(분석 기간 {config.DATE_START} ~ {config.DATE_END} 밖이거나 본문이 빈 리뷰).")
     for e in errs[:40]:
         print("   !", e)
     if len(errs) > 40:
@@ -196,15 +207,15 @@ def export(_):
     if config.TRANSLATE_TODO.exists():
         print(f"  [주의] 번역이 남은 외국어 리뷰가 있습니다 ({rel(config.TRANSLATE_TODO)}). "
               "번역을 넣고 preprocess.py 부터 다시 실행한 뒤 판정하세요.")
-    ann, errs = read_annotations(t)
-    status(t, ann, errs)
+    ann, errs, outside = read_annotations(t)
+    status(t, ann, errs, outside)
     print(f"  판정 방법: {GUIDE}")
 
 
 def check(_):
     _, t = load_targets()
-    ann, errs = read_annotations(t)
-    left = status(t, ann, errs)
+    ann, errs, outside = read_annotations(t)
+    left = status(t, ann, errs, outside)
     if errs:
         sys.exit(1)
     if not left:
@@ -214,7 +225,7 @@ def check(_):
 def merge(_):
     ck = Checks("만족·불만 요인 판정 병합")
     df, t = load_targets()
-    ann, errs = read_annotations(t)
+    ann, errs, outside = read_annotations(t)
     ck("판정 파일 존재", ANN.exists(), rel(ANN) if ANN.exists() else f"{rel(ANN)} 없음 — {GUIDE} 대로 판정")
     ck("판정 형식·원문 대조", not errs, f"오류 {len(errs)}건 — check 로 확인" if errs else f"{len(ann)}건")
     left = int((~t["reviewId"].isin(ann)).sum())
