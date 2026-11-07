@@ -208,7 +208,7 @@ def main():
     if end:
         keep &= df["date"] <= end
     ck("DATE_END 고정", end is not None,
-       config.DATE_END if end else "config.DATE_END 가 None — 수집일 전날로 고정해 주세요", fatal=False)
+       config.DATE_END if end else "config.DATE_END 가 None — 분석 기간의 끝날로 고정해 주세요", fatal=False)
     print(f"  기간 필터 {config.DATE_START} ~ {config.DATE_END or '(상한 없음)'}: "
           f"{len(df)} → {int(keep.sum())}")
     df = df[keep].copy()
