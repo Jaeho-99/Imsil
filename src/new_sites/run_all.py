@@ -10,7 +10,7 @@ API 를 부르지 않는다. LLM 이 판정하는 단계(감성·만족·불만 
 
 순서: build_dataset → preprocess → keywords → association
       → sentiment build·check (→ 판정이 있으면 review·merge, 검증셋 validate)
-      → satisfaction export (→ 판정이 다 되면 merge) → summary
+      → satisfaction export (→ 판정이 다 되면 merge → combined_report) → summary
 판정 방법과 순서는 docs/new_sites.md, 지시문은 input/new_sites/claude_지시문/ 에 있다.
 """
 import argparse
@@ -82,6 +82,7 @@ def main():
     step("satisfaction.py", "export")
     if satisfaction.complete():
         step("satisfaction.py", "merge")
+        step("combined_report.py")     # 34개소 + 추가 2개소 합산 표·그림 (보고서 리뷰 분석 절)
     else:
         left.append(f"요인 판정: {rel(config.FACTOR_ANN)} (claude_지시문/요인.md)")
 
