@@ -28,6 +28,7 @@
 | 감성 | `sentiment.py` | `textsplit.py`, `프롬프트_v1.md`(무수정), `check_output.py`, 채점 규칙, 리뷰 집계 규칙 | 판정 묶음 내보내기, 34개소 검증셋 재채점, 사람 검토표 |
 | 요인 | `satisfaction.py` | `analyze_satisfaction.py`의 프롬프트·카테고리·결과 행 변환, `annotation/merge.py`의 원문 대조 규칙 | 판정 대상 내보내기, 관광지별 요인 집계·대표 원문·그림 |
 | 요약 | `summary.py` | | 보고서용 표·문장 재료 |
+| 합산 | `combined_report.py` | | 34개소 + 추가 2개소를 합친 보고서 리뷰 분석 절의 표·그림 (그림 2-7~2-10, 표 2-2) |
 
 ## 전체 흐름
 
@@ -137,6 +138,7 @@ python src/new_sites/run_all.py
 | 10 | `satisfaction.py export` | | `satisfaction/판정대상.jsonl`, `판정프롬프트.txt` |
 | 11 | `satisfaction.py check` | `satisfaction/annotations.jsonl` | 형식·원문 대조·남은 리뷰 (출력 파일 없음) |
 | 12 | `satisfaction.py merge` | `satisfaction/annotations.jsonl` | 리뷰별 요인(34개소와 같은 열), 관광지별 집계, 대표 원문, 그림 |
+| 12-1 | `combined_report.py` | | `combined/` — 34개소와 합친 연도별·요인·관광지별·계절별 숫자와 그림 4개, `수치요약.md` (34개소 숫자 재현 검사 포함) |
 | 13 | `summary.py` | | `summary/분석결과_요약.md`, `산출물_목록.csv` |
 
 ### 판정 파일이 지금 데이터와 어긋나지 않게 하는 장치
