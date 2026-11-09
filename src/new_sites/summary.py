@@ -69,8 +69,9 @@ def overview():
              f"총 {len(d):,}건 (본문 있음 {int(d['본문'].sum()):,}건). 평균평점은 별점이 있는 리뷰만 "
              "(네이버는 대부분 별점이 없다).\n")
     table(ov[["place", "platform", "리뷰", "본문있음", "시작", "끝", "평균평점"]])
-    L.append("※ 34개소 분석의 인접 관광지(비교용): "
-             + ", ".join(f"{k} ↔ {v}" for k, v in config.COMPARE_PLACES.items()) + "\n")
+    if config.COMPARE_PLACES:
+        L.append("※ 34개소 분석의 인접 관광지(비교용): "
+                 + ", ".join(f"{k} ↔ {v}" for k, v in config.COMPARE_PLACES.items()) + "\n")
 
     plt = setup_font()
     d["연도"] = pd.to_datetime(d["date"]).dt.year
