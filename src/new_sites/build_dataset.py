@@ -8,6 +8,7 @@
   input/new_sites/비식별_치환목록.csv                    사람이 실명으로 확인한 표현 (있을 때만)
 출력
   output/new_sites/추가관광지_리뷰데이터.csv    place, platform, reviewId, rating, body, date, visitCount, tags
+  output/new_sites/추가관광지_리뷰데이터_요인기간.csv   같은 열, config.FACTOR_DATE_END 까지 (요인 판정용)
   output/collect/naver/추가관광지_리뷰ID_대응표.csv
                                    원본 리뷰ID ↔ 가명 ID (git 제외. 재실행해도 같은 가명을 유지)
 
@@ -15,6 +16,7 @@
   - 컬럼·값 형식: platform 은 '구글'/'네이버', date 는 YYYY-MM-DD, tags 는 JSON 리스트 문자열
     (네이버 키워드 리뷰 + 방문 목적·동반자 키워드), 구글 tags 는 "[]"
   - 수집 기간: config.DATE_START ~ config.DATE_END
+    (만족·불만 요인 판정용으로 config.FACTOR_DATE_END 까지 넓힌 파일을 따로 쓴다 — 아래 출력)
   - 작성자 정보(닉네임·ID·프로필)는 버린다. 리뷰ID 는 가명(RV10001~)으로 바꾼다.
 
 실행
@@ -204,12 +206,13 @@ def main():
     ck("날짜 해석", no_date == 0, f"해석 실패 {no_date}건", fatal=False)
     start = pd.to_datetime(config.DATE_START).date()
     end = pd.to_datetime(config.DATE_END).date() if config.DATE_END else None
+    fend = pd.to_datetime(config.factor_end()).date() if config.factor_end() else None
     keep = df["date"].notna() & (df["date"] >= start)
-    if end:
-        keep &= df["date"] <= end
+    if fend:
+        keep &= df["date"] <= fend
     ck("DATE_END 고정", end is not None,
        config.DATE_END if end else "config.DATE_END 가 None — 분석 기간의 끝날로 고정해 주세요", fatal=False)
-    print(f"  기간 필터 {config.DATE_START} ~ {config.DATE_END or '(상한 없음)'}: "
+    print(f"  기간 필터 {config.DATE_START} ~ {config.factor_end() or '(상한 없음)'} (요인 판정용): "
           f"{len(df)} → {int(keep.sum())}")
     df = df[keep].copy()
 
@@ -226,6 +229,12 @@ def main():
        list(df.columns) == list(read_csv(config.BASE_DATASET, nrows=1).columns))
     ck("작성자 정보 없음", not any(c in df.columns for c in ("nickname", "작성자닉네임", "작성자ID")))
 
+    write_csv(df, config.DATASET_FACTOR)
+    if end:
+        n_f = len(df)
+        df = df[pd.to_datetime(df["date"]).dt.date <= end]
+        print(f"  분석 기간 {config.DATE_START} ~ {config.DATE_END}: {n_f} → {len(df)}  "
+              f"(요인 판정용 {rel(config.DATASET_FACTOR)} {n_f}행)")
     write_csv(df, config.DATASET)
     has_body = df["body"].fillna("").str.strip().ne("")
     print(f"\n저장: {rel(config.DATASET)}  {len(df)}행 · 본문 있는 리뷰 {int(has_body.sum())}")

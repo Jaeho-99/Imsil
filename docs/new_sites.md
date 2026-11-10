@@ -8,6 +8,7 @@
 | 분석 대상 | 성수산, 오수의견국민여가캠핑장 |
 | 플랫폼 | 네이버 플레이스만 (구글 지도에는 두 곳의 리뷰가 없어 수집하지 않음, 2026-11-05 결정) |
 | 분석 기간 | 2022-01-01 ~ 2025-12-31 (34개소 보고서와 같은 2022~2025년, `config.py`의 `DATE_START`·`DATE_END`) |
+| 요인 분석 기간 | 2022-01-01 ~ 2026-08-31 (`FACTOR_DATE_END`). 만족·불만 요인 판정과 34개소 합산 요인·관광지별 표에만 쓴다. 34개소 보고서가 요인·관광지별 집계에 2022년~2026년 8월 리뷰를 썼기 때문이다 (2026-11-10) |
 | 분석 | 키워드(빈도·TF-IDF·n-gram) · 연관관계(연관규칙·동시출현 네트워크) · 문장 단위 감성 · 만족·불만 요인 |
 | 최종 제출 | 2026-11-14 |
 
@@ -60,6 +61,8 @@ python src/new_sites/import_har.py 다운로드\m.place.naver.com.har
 ```
 
 수집은 수집일까지의 리뷰를 모두 받고, 분석에는 `config.py`의 `DATE_START`~`DATE_END` 안의 리뷰만 씁니다. 34개소 보고서의 분석 기간에 맞춰 2022-01-01~2025-12-31로 정했습니다 (2026-11-07). 처음에는 첫 수집일 전날(2026-11-02)까지 썼습니다.
+
+만족·불만 요인만은 `FACTOR_DATE_END`(2026-08-31)까지 판정합니다 (2026-11-10). 34개소 보고서가 연도별·계절별 비교만 2022~2025년으로 하고, 요인·관광지별 집계에는 2022년~2026년 8월 리뷰를 썼기 때문입니다. `build_dataset.py`·`preprocess.py`는 이 기간까지의 파일(`…_요인기간.csv`)과 `DATE_END`까지의 파일을 함께 만듭니다. 전처리는 행마다 따로 하므로 `DATE_END`까지의 행은 두 파일이 같습니다. 키워드·연관·감성 분석과 추가관광지 보고서용 요인 결과는 지금처럼 `DATE_END`까지만 씁니다. 그래서 감성 판정을 다시 할 필요는 없습니다.
 
 #### 분석 기간을 바꾸면
 
@@ -126,8 +129,8 @@ python src/new_sites/run_all.py
 
 | 순서 | 명령 (`python src/new_sites/…`) | 읽는 판정 (`input/new_sites/…`) | 출력 (`output/new_sites/…`) · 비고 |
 |---|---|---|---|
-| 1 | `build_dataset.py` | `비식별_치환목록.csv` | `추가관광지_리뷰데이터.csv` |
-| 2 | `preprocess.py` | `번역결과.csv` | `추가관광지_리뷰데이터_1차전처리.csv`, 번역이 빠진 외국어 리뷰가 있으면 `번역대상.csv` |
+| 1 | `build_dataset.py` | `비식별_치환목록.csv` | `추가관광지_리뷰데이터.csv`, `추가관광지_리뷰데이터_요인기간.csv` |
+| 2 | `preprocess.py` | `번역결과.csv` | `추가관광지_리뷰데이터_1차전처리.csv`, `…_1차전처리_요인기간.csv`, 번역이 빠진 외국어 리뷰가 있으면 `번역대상.csv` |
 | 3 | `keywords.py` | | `keyword/` |
 | 4 | `association.py` | | `association/` |
 | 5 | `sentiment.py build` | | `sentiment/문장목록.csv`, `sentiment/chunks/` |
@@ -135,10 +138,10 @@ python src/new_sites/run_all.py
 | 7 | `sentiment.py validate --run run1` (run2도) | `sentiment/검증_34개소/` | `sentiment/검증_34개소/채점_run*.json` (34개소 사람 라벨로 채점) |
 | 8 | `sentiment.py review` | `sentiment/runs/run1/` | `sentiment/사람검토표.xlsx` 양식 |
 | 9 | `sentiment.py merge` | `sentiment/runs/run1/`, `사람검토표.xlsx` | 최종 문장·리뷰 라벨, 관광지별 집계, 그림 |
-| 10 | `satisfaction.py export` | | `satisfaction/판정대상.jsonl`, `판정프롬프트.txt` |
+| 10 | `satisfaction.py export` | | `satisfaction/판정대상.jsonl`, `판정프롬프트.txt` (요인 분석 기간 2026-08-31까지) |
 | 11 | `satisfaction.py check` | `satisfaction/annotations.jsonl` | 형식·원문 대조·남은 리뷰 (출력 파일 없음) |
-| 12 | `satisfaction.py merge` | `satisfaction/annotations.jsonl` | 리뷰별 요인(34개소와 같은 열), 관광지별 집계, 대표 원문, 그림 |
-| 12-1 | `combined_report.py` | | `combined/` — 34개소와 합친 연도별·요인·관광지별·계절별 숫자와 그림 4개, `수치요약.md` (34개소 숫자 재현 검사 포함) |
+| 12 | `satisfaction.py merge` | `satisfaction/annotations.jsonl` | 리뷰별 요인(34개소와 같은 열) — `리뷰별_만족불만요인_분석결과.csv`(~2025-12-31)와 `…_요인기간.csv`(~2026-08-31), 관광지별 집계·대표 원문·그림(~2025-12-31) |
+| 12-1 | `combined_report.py` | | `combined/` — 34개소와 합친 연도별·계절별(2022~2025년)·요인·관광지별(2022년~2026년 8월) 숫자와 그림 4개, `수치요약.md`. 요인은 리뷰 수(한 리뷰의 같은 요인은 1건)로 센다 |
 | 13 | `summary.py` | | `summary/분석결과_요약.md`, `산출물_목록.csv` |
 
 ### 판정 파일이 지금 데이터와 어긋나지 않게 하는 장치
@@ -219,6 +222,7 @@ IMSIL_DEMO=1 python src/new_sites/run_all.py --demo        # Windows PowerShell:
 | `input/new_sites/비식별_치환목록.csv` | 사람이 실명으로 확인한 표현 → `○○○` (실명이 그대로 들어 있어 내 PC에만 둔다) | 사람 | 제외 |
 | `output/new_sites/추가관광지_리뷰데이터.csv` | 통합 원본 (비식별) | 코드 | ○ |
 | `output/new_sites/추가관광지_리뷰데이터_1차전처리.csv` | 1차전처리본 | 코드 | ○ |
+| `output/new_sites/…_요인기간.csv` | 요인 분석 기간(2026-08-31)까지의 통합 원본·1차전처리본 | 코드 | ○ |
 | `output/new_sites/번역대상.csv` | 번역이 빠진 외국어 리뷰 (원문을 담은 중간 파일) | 코드 | 제외 |
 | `output/new_sites/keyword/` | 토큰 파일, 빈도·TF-IDF·n-gram Top20, 네이버 키워드 리뷰 집계, 그림 | 코드 | ○ |
 | `output/new_sites/association/` | 연관규칙, 동시출현 노드·엣지, 네트워크 그림 | 코드 | ○ |

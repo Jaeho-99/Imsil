@@ -30,7 +30,13 @@
   같은 요인이 34개소 전체·인접 관광지에서는 어땠는지 나란히 놓는다.
   보고서 인용용으로 요인별 대표 원문(span)을 뽑는다.
 
-입력  output/new_sites/추가관광지_리뷰데이터_1차전처리.csv (preprocess.py 결과)
+판정 기간
+  판정 대상은 config.FACTOR_DATE_END(2026-08-31)까지의 리뷰다. 34개소 보고서가 요인·관광지별 집계에
+  2022년~2026년 8월 리뷰를 썼기 때문이다. 결과는 두 파일로 낸다.
+    리뷰별_만족불만요인_분석결과.csv           DATE_END(2025-12-31)까지 — 추가관광지 보고서·집계·그림용
+    리뷰별_만족불만요인_분석결과_요인기간.csv   FACTOR_DATE_END 까지 — combined_report.py(34개소와 합산)용
+
+입력  output/new_sites/추가관광지_리뷰데이터_1차전처리_요인기간.csv (preprocess.py 결과)
       input/new_sites/satisfaction/annotations.jsonl
 출력  output/new_sites/satisfaction/판정대상.jsonl · 판정프롬프트.txt      (export)
       output/new_sites/satisfaction/리뷰별_만족불만요인_분석결과.csv      (merge — 34개소 같은 이름 파일과 같은 열)
@@ -62,6 +68,7 @@ import analyze_satisfaction as az  # noqa: E402  34개소 코드: 프롬프트·
 CATS12 = [c for c in az.CATEGORIES if c != "대상외"]
 OUT = config.OUT_FACTOR
 OUT_CSV = OUT / "리뷰별_만족불만요인_분석결과.csv"
+OUT_CSV_FACTOR = OUT / "리뷰별_만족불만요인_분석결과_요인기간.csv"
 TARGETS = OUT / "판정대상.jsonl"
 PROMPT = OUT / "판정프롬프트.txt"
 ANN = config.FACTOR_ANN
@@ -78,10 +85,11 @@ def body_hash(body) -> str:
 
 
 def load_targets():
-    """1차전처리본 전체와, 판정 대상(본문 있는 리뷰 — analyze_satisfaction.py 와 같은 기준)."""
-    if not config.PREPROCESSED.exists():
-        sys.exit(f"{rel(config.PREPROCESSED)} 이 없습니다. preprocess.py 를 먼저 실행하세요.")
-    df = pd.read_csv(config.PREPROCESSED, dtype=str, keep_default_na=False, encoding="utf-8-sig")
+    """요인 기간 1차전처리본 전체와, 판정 대상(본문 있는 리뷰 — analyze_satisfaction.py 와 같은 기준)."""
+    src = config.PREPROCESSED_FACTOR
+    if not src.exists():
+        sys.exit(f"{rel(src)} 이 없습니다. build_dataset.py · preprocess.py 를 먼저 실행하세요.")
+    df = pd.read_csv(src, dtype=str, keep_default_na=False, encoding="utf-8-sig")
     t = df[df["body"].str.strip() != ""]
     return df, t
 
@@ -152,12 +160,12 @@ def read_annotations(t: pd.DataFrame):
 
 def merge_inputs():
     """merge 가 읽는 입력 — 결과 폴더의 입력기록.json 에 해시를 남긴다."""
-    return [config.PREPROCESSED, ANN]
+    return [config.PREPROCESSED_FACTOR, config.PREPROCESSED, ANN]
 
 
 def complete() -> bool:
     """모든 판정 대상 리뷰의 판정이 오류 없이 있는가 (run_all.py 가 merge 전에 본다)."""
-    if not config.PREPROCESSED.exists():
+    if not config.PREPROCESSED_FACTOR.exists():
         return False
     _, t = load_targets()
     ann, errs, outside = read_annotations(t)
@@ -183,7 +191,7 @@ def status(t: pd.DataFrame, ann: dict, errs: list, outside: list = ()):
     print(f"\n  판정 {len(ann)}/{len(t)}건 · 남은 리뷰 {len(left)}건 · 오류 {len(errs)}건  ({rel(ANN)})")
     if outside:
         print(f"  지금 판정 대상이 아닌 리뷰의 줄 {len(outside)}개는 읽지 않습니다 "
-              f"(분석 기간 {config.DATE_START} ~ {config.DATE_END} 밖이거나 본문이 빈 리뷰).")
+              f"(판정 기간 {config.DATE_START} ~ {config.factor_end()} 밖이거나 본문이 빈 리뷰).")
     for e in errs[:40]:
         print("   !", e)
     if len(errs) > 40:
@@ -243,9 +251,15 @@ def merge(_):
     out = df[az.BASE_COLUMNS].copy()
     for c in az.RESULT_COLUMNS:
         out[c] = [r.get(c, "") for r in rows]
-    write_csv(out, OUT_CSV)
+    write_csv(out, OUT_CSV_FACTOR)
     n_f = sum(len(a["f"]) for a in ann.values())
-    ck("리뷰별 결과 CSV", len(out) == len(df), f"{len(out)}행 · 요인 {n_f}개 · {rel(OUT_CSV)}")
+    ck("리뷰별 결과 CSV (요인 기간)", len(out) == len(df), f"{len(out)}행 · 요인 {n_f}개 · {rel(OUT_CSV_FACTOR)}")
+    base_ids = set(pd.read_csv(config.PREPROCESSED, dtype=str, keep_default_na=False,
+                               encoding="utf-8-sig")["reviewId"])
+    out_a = out[out["reviewId"].isin(base_ids)]
+    write_csv(out_a, OUT_CSV)
+    ck("리뷰별 결과 CSV (분석 기간)", len(out_a) == len(base_ids),
+       f"{len(out_a)}행 (~{config.DATE_END}) · {rel(OUT_CSV)}")
     aggregate()
     save_inputs(OUT, merge_inputs())
 

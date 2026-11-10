@@ -5,34 +5,40 @@
 다시 만든다. 판정은 새로 하지 않는다. 두 분석의 리뷰별 결과 파일을 행 단위로 합쳐 같은 방식으로 센다.
 
   34개소   output/satisfaction/리뷰별_만족불만요인_분석결과.csv           (5장 결과, 5,267행)
-  추가     output/new_sites/satisfaction/리뷰별_만족불만요인_분석결과.csv  (satisfaction.py merge 결과)
+  추가     output/new_sites/satisfaction/리뷰별_만족불만요인_분석결과_요인기간.csv  (satisfaction.py merge 결과,
+           config.FACTOR_DATE_END 까지)
 
 두 파일은 열이 같다. 한 행이 수집 리뷰 하나이고, 본문이 없는 리뷰도 run_status='skipped: 본문 없음' 으로 들어 있다.
 
-보고서 항목과 세는 방법 (34개소 보고서의 숫자를 이 방법으로 그대로 재현한다 — 아래 '재현 확인')
+보고서 항목과 세는 방법
   그림 2-7 (요약본 그림 10)  연도별 수집 리뷰 수 · 만족도 분석 리뷰 수
         수집 = 행 수, 분석 = run_status 'ok' 이고 overall_sentiment 가 POS·NEU·NEG 인 행. 2022~2025년.
   그림 2-8 (요약본 그림 11)  연도별 긍정·중립·부정 리뷰 비율 — 분석 리뷰의 overall_sentiment. 2022~2025년.
-  그림 2-9 · 요약본 표 2      만족·불만 요인 상위 5개 — factors_json 의 (요인, 극성) 언급 수. '대상외' 제외.
-  표 2-2 · 요약본 표 4        관광지별 분석 리뷰 수와 요인별 만족·불만 언급 수
+  그림 2-9 · 요약본 표 2      만족·불만 요인 상위 5개 — 요인을 만족(또는 불만)으로 언급한 리뷰 수. '대상외' 제외.
+  표 2-2 · 요약본 표 4        관광지별 분석 리뷰 수와 요인별 만족·불만 리뷰 수
+
+  요인은 리뷰 수로 센다 (2026-11-10 결정). 한 리뷰에서 같은 요인을 여러 번 언급해도 1건이다.
+  34개소 보고서 초안은 (요인, 극성) 언급 수로 셌다. 34개소 리뷰는 같은 요인을 거듭 언급하는 일이 드물어(리뷰당 0.04건)
+  두 방식의 차이가 작았지만, 오수의견국민여가캠핑장 리뷰는 길어서(본문 중앙값 250자, 34개소 21자) 리뷰당 1.4건이
+  거듭 언급되어 언급 수가 분석 리뷰 수보다 커졌다. 그래서 34개소를 포함한 전체를 리뷰 수로 다시 센다.
   그림 2-10                  계절별 긍정·중립·부정 리뷰 비율 (봄 3~5월, 여름 6~8월, 가을 9~11월, 겨울 12~2월). 2022~2025년.
 
 기간
   연도별·계절별 항목은 두 분석 모두 2022~2025년만 센다.
-  요인 언급 수와 관광지별 분석 리뷰 수는 34개소 보고서가 34개소 결과 파일 전체(2022년~2026년 8월)로 셌으므로
-  34개소 쪽은 그대로 전체를 쓴다(FACTOR_YEARS_34 = None). 추가 2개소 결과 파일은 분석 기간(config.DATE_START~
-  DATE_END, 2022~2025년)의 리뷰만 들어 있다. 두 분석의 기간 차이는 보고서 주석에 적는다.
+  요인 리뷰 수와 관광지별 분석 리뷰 수는 34개소 보고서와 같이 2022년~2026년 8월 리뷰로 센다.
+  34개소 결과 파일은 전체가 이 기간이다(FACTOR_YEARS_34 = None). 추가 2개소는 요인 기간 결과 파일
+  (config.FACTOR_DATE_END = 2026-08-31 까지)을 쓴다.
 
-재현 확인 (34개소만 셌을 때 보고서와 같아야 하는 숫자 — 다르면 멈춘다)
-  수집 2022~2025년 1,192 · 1,817 · 1,238 · 730건, 분석 691 · 1,047 · 792 · 468건
-  만족 1위 경관·볼거리 1,044건, 불만 1위 자연·기상조건 240건, 계절 합계 2,998건
+재현 확인 (34개소만 셌을 때 보고서 초안과 같아야 하는 숫자 — 다르면 멈춘다. 입력 파일이 같은지 보는 검사다)
+  수집 2022~2025년 1,192 · 1,817 · 1,238 · 730건, 분석 691 · 1,047 · 792 · 468건, 계절 합계 2,998건
+  언급 수로 셌을 때 만족 1위 경관·볼거리 1,044건, 불만 1위 자연·기상조건 240건
 
 입력  output/satisfaction/리뷰별_만족불만요인_분석결과.csv
-      output/new_sites/satisfaction/리뷰별_만족불만요인_분석결과.csv
+      output/new_sites/satisfaction/리뷰별_만족불만요인_분석결과_요인기간.csv
 출력  output/new_sites/combined/
         연도별_리뷰수_감성.csv       그림 2-7·2-8 숫자 (34개소 · 추가 2개소 · 합계, 전년 대비 증감)
-        요인별_언급수.csv           그림 2-9 숫자 (요인 × 만족·불만, 34개소 · 추가 · 합계, 순위)
-        관광지별_요인언급수.csv      표 2-2 숫자 (관광지 × 요인 × 만족·불만)
+        요인별_리뷰수.csv           그림 2-9 숫자 (요인 × 만족·불만, 34개소 · 추가 · 합계, 순위)
+        관광지별_요인리뷰수.csv      표 2-2 숫자 (관광지 × 요인 × 만족·불만)
         관광지별_주요요인.csv        표 2-2 한 줄 요약 (관광지별 분석 리뷰 수, 만족·불만 상위 3개)
         계절별_감성.csv             그림 2-10 숫자
         수치요약.md                 본문 문장에 들어가는 숫자 (증감률 등)
@@ -58,11 +64,11 @@ sys.path.insert(0, str(config.FACTOR_SCRIPT.parent))
 import analyze_satisfaction as az  # noqa: E402  34개소 코드: 요인 카테고리
 
 BASE_CSV = config.BASE_FACTOR
-NEW_CSV = config.OUT_FACTOR / "리뷰별_만족불만요인_분석결과.csv"
+NEW_CSV = config.OUT_FACTOR / "리뷰별_만족불만요인_분석결과_요인기간.csv"
 OUT = config.OUT / "combined"
 
 YEARS = [2022, 2023, 2024, 2025]           # 연도별·계절별 항목 (두 분석 모두)
-FACTOR_YEARS_34 = None                     # 34개소 요인 언급 수의 기간. None = 결과 파일 전체 (34개소 보고서와 같다)
+FACTOR_YEARS_34 = None                     # 34개소 요인 집계 기간. None = 결과 파일 전체 (2022년~2026년 8월, 34개소 보고서와 같다)
 TOP_N = 5                                  # 그림 2-9 상위 요인 수
 CATS = [c for c in az.CATEGORIES if c != "대상외"]
 SENTS = [("POS", "긍정"), ("NEU", "중립"), ("NEG", "부정")]
@@ -110,8 +116,9 @@ def season_of(month: int) -> str:
     return SEASONS[(month % 12) // 3 - 1]   # 3~5 봄, 6~8 여름, 9~11 가을, 12~2 겨울
 
 
-def factor_rows(df: pd.DataFrame) -> pd.DataFrame:
-    """factors_json 의 (요인, 극성) 한 쌍이 한 행. 34개소 보고서의 요인 '건수'는 이 행 수다."""
+def factor_rows(df: pd.DataFrame, per_review: bool = True) -> pd.DataFrame:
+    """factors_json 의 (요인, 극성) 한 쌍이 한 행. per_review 이면 한 리뷰의 같은 (요인, 극성)은 한 행만 남긴다
+    (= 리뷰 수). False 면 언급 수 (34개소 보고서 초안의 방식, 재현 확인에만 쓴다)."""
     rows = []
     for r in df[df["is_analyzed"]].itertuples():
         try:
@@ -121,11 +128,14 @@ def factor_rows(df: pd.DataFrame) -> pd.DataFrame:
         for f in fs:
             rows.append({"group": r.group, "place": r.place, "reviewId": r.reviewId, "year": r.year,
                          "category": f.get("category"), "sentiment": f.get("sentiment")})
-    return pd.DataFrame(rows, columns=["group", "place", "reviewId", "year", "category", "sentiment"])
+    out = pd.DataFrame(rows, columns=["group", "place", "reviewId", "year", "category", "sentiment"])
+    if per_review:
+        out = out.drop_duplicates(["group", "reviewId", "category", "sentiment"])
+    return out
 
 
 def in_factor_period(df: pd.DataFrame) -> pd.DataFrame:
-    """요인 집계에 쓰는 행 — 34개소는 FACTOR_YEARS_34, 추가 2개소는 결과 파일 전체(이미 분석 기간)."""
+    """요인 집계에 쓰는 행 — 34개소는 FACTOR_YEARS_34, 추가 2개소는 요인 기간 결과 파일 전체."""
     if FACTOR_YEARS_34 is None:
         return df
     keep = (df["group"] != "34개소") | df["year"].isin(FACTOR_YEARS_34)
@@ -170,7 +180,7 @@ def factor_counts(fr: pd.DataFrame) -> pd.DataFrame:
             fc = f[f["sentiment"] == code]["category"].value_counts()
             ranked = sorted(CATS, key=lambda c: (-int(fc.get(c, 0)), CATS.index(c)))
             for rank, c in enumerate(ranked, 1):
-                rows.append({"구분": g, "극성": label, "요인": c, "언급수": int(fc.get(c, 0)), "순위": rank})
+                rows.append({"구분": g, "극성": label, "요인": c, "리뷰수": int(fc.get(c, 0)), "순위": rank})
     return pd.DataFrame(rows)
 
 
@@ -184,7 +194,7 @@ def place_factors(an: pd.DataFrame, fr: pd.DataFrame) -> tuple[pd.DataFrame, pd.
             fc = f[f["sentiment"] == code]["category"].value_counts()
             for c in CATS:
                 long_rows.append({"구분": g, "관광지": p, "분석리뷰": int(n), "극성": label,
-                                  "요인": c, "언급수": int(fc.get(c, 0))})
+                                  "요인": c, "리뷰수": int(fc.get(c, 0))})
             ranked = [c for c in sorted(CATS, key=lambda c: (-int(fc.get(c, 0)), CATS.index(c)))
                       if fc.get(c, 0)]
             for i in range(3):
@@ -271,12 +281,12 @@ def plot_factors(plt, fc: pd.DataFrame, path):
     fig, axes = plt.subplots(2, 1, figsize=(10, 8.4))
     for ax, (label, code, legend) in zip(axes, (("만족", "POS", "만족 요인"), ("불만", "NEG", "불만 요인"))):
         d = f[f["극성"] == label].sort_values("순위")
-        bars = ax.bar(d["요인"], d["언급수"], width=0.55, color=C_FACTOR[code], label=legend)
-        for b, v in zip(bars, d["언급수"]):
+        bars = ax.bar(d["요인"], d["리뷰수"], width=0.55, color=C_FACTOR[code], label=legend)
+        for b, v in zip(bars, d["리뷰수"]):
             ax.annotate(f"{v:,}", (b.get_x() + b.get_width() / 2, b.get_height()), xytext=(0, 3),
                         textcoords="offset points", ha="center", va="bottom", fontsize=10)
-        ax.set_ylabel("언급 수(건)")
-        ax.set_ylim(0, d["언급수"].max() * 1.18)
+        ax.set_ylabel("리뷰 수(건)")
+        ax.set_ylim(0, d["리뷰수"].max() * 1.18)
         _clean(ax)
         ax.legend(frameon=False, loc="upper center", bbox_to_anchor=(0.5, -0.12))
     fig.tight_layout(h_pad=2.5)
@@ -342,7 +352,7 @@ def summary_md(t, fc, top, s, n_new_by_place) -> str:
         L += [f"## 만족·불만 요인 상위 {TOP_N} ({g})", ""]
         for label in ("만족", "불만"):
             d = fc[(fc["구분"] == g) & (fc["극성"] == label) & (fc["순위"] <= TOP_N + 1)]
-            L.append(f"- {label}: " + ", ".join(f"{r.요인} {r.언급수:,}건" for r in d.itertuples()))
+            L.append(f"- {label}: " + ", ".join(f"{r.요인} {r.리뷰수:,}건" for r in d.itertuples()))
         L.append("")
     L += ["## 관광지별 주요 요인 (분석 리뷰 수 순)", "",
           "| 구분 | 관광지 | 분석 리뷰 | 만족 1 | 만족 2 | 만족 3 | 불만 1 | 불만 2 | 불만 3 |",
@@ -360,7 +370,10 @@ def summary_md(t, fc, top, s, n_new_by_place) -> str:
         L += [f"## 계절별 ({g}) — 합계 {tot:,}건, 전체 긍정 {100 * pos / tot:.1f}%" if tot else f"## 계절별 ({g})", ""]
         for k in SEASONS:
             r = ss.loc[k]
-            L.append(f"- {k} (n={r['분석리뷰']:,}): 긍정 {r['긍정비율']}%, 중립 {r['중립비율']}%, 부정 {r['부정비율']}%")
+            if r["분석리뷰"]:
+                L.append(f"- {k} (n={r['분석리뷰']:,}): 긍정 {r['긍정비율']}%, 중립 {r['중립비율']}%, 부정 {r['부정비율']}%")
+            else:
+                L.append(f"- {k} (n=0): 리뷰 없음")
         L.append("")
     return "\n".join(L)
 
@@ -376,7 +389,7 @@ def main():
     ck("두 파일의 리뷰ID 겹침 없음", not set(base["reviewId"]) & set(new["reviewId"]))
     bad_dates = int(base["year"].isna().sum() + new["year"].isna().sum())
     ck("날짜 읽기", bad_dates == 0, f"읽지 못한 날짜 {bad_dates}건")
-    lo, hi = config.DATE_START[:4], (config.DATE_END or "9999")[:4]
+    lo, hi = config.DATE_START[:4], (config.factor_end() or "9999")[:4]
     ck("추가 2개소 기간", new["year"].between(int(lo), int(hi)).all(), f"{int(new['year'].min())}~{int(new['year'].max())}년")
 
     parts = with_total({"34개소": base, "추가2개소": new})
@@ -393,16 +406,17 @@ def main():
     ck("재현: 34개소 연도별 수집 리뷰", t34["수집리뷰"].to_dict() == EXPECT_34["collected"], f"{t34['수집리뷰'].to_dict()}")
     ck("재현: 34개소 연도별 분석 리뷰", t34["분석리뷰"].to_dict() == EXPECT_34["analyzed"], f"{t34['분석리뷰'].to_dict()}")
     if FACTOR_YEARS_34 is None:
-        f34 = fc[(fc["구분"] == "34개소") & (fc["순위"] == 1)].set_index("극성")
-        got = ((f34.loc["만족", "요인"], f34.loc["만족", "언급수"]), (f34.loc["불만", "요인"], f34.loc["불만", "언급수"]))
-        ck("재현: 34개소 만족·불만 1위", got == (EXPECT_34["pos_top"], EXPECT_34["neg_top"]), f"{got}")
+        m34 = factor_rows(an[an["group"] == "34개소"], per_review=False)
+        top_of = lambda code: m34[m34["sentiment"] == code]["category"].value_counts().head(1)  # noqa: E731
+        got = tuple((t.index[0], int(t.iloc[0])) for t in (top_of("POS"), top_of("NEG")))
+        ck("재현: 34개소 만족·불만 1위 (언급 수)", got == (EXPECT_34["pos_top"], EXPECT_34["neg_top"]), f"{got}")
     s34 = int(s[s["구분"] == "34개소"]["분석리뷰"].sum())
     ck("재현: 34개소 계절별 합계", s34 == EXPECT_34["season_total"], f"{s34:,}건")
 
     OUT.mkdir(parents=True, exist_ok=True)
     write_csv(t, OUT / "연도별_리뷰수_감성.csv")
-    write_csv(fc, OUT / "요인별_언급수.csv")
-    write_csv(long_pf, OUT / "관광지별_요인언급수.csv")
+    write_csv(fc, OUT / "요인별_리뷰수.csv")
+    write_csv(long_pf, OUT / "관광지별_요인리뷰수.csv")
     write_csv(top, OUT / "관광지별_주요요인.csv")
     write_csv(s, OUT / "계절별_감성.csv")
     n_new = new.groupby("place").size().to_dict()
@@ -423,7 +437,7 @@ def main():
           + f" (계 {tt['분석리뷰'].sum():,})")
     for label in ("만족", "불만"):
         d = fc[(fc["구분"] == "합계") & (fc["극성"] == label) & (fc["순위"] <= TOP_N)]
-        print(f"  {label} 상위 {TOP_N}: " + ", ".join(f"{r.요인} {r.언급수:,}" for r in d.itertuples()))
+        print(f"  {label} 상위 {TOP_N}: " + ", ".join(f"{r.요인} {r.리뷰수:,}" for r in d.itertuples()))
     print(f"\n저장: {rel(OUT)}/  (숫자는 수치요약.md)")
 
 

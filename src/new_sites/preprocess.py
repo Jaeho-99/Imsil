@@ -17,9 +17,11 @@
   (열: reviewId, 원문, 번역, 방법) 로 저장한 뒤 다시 실행하면 번역문을 쓴다.
   2026-11 수집분(성수산·오수의견국민여가캠핑장 네이버 리뷰)에는 외국어 리뷰가 없다.
 
-입력  output/new_sites/추가관광지_리뷰데이터.csv (build_dataset.py 결과)
+입력  output/new_sites/추가관광지_리뷰데이터_요인기간.csv (build_dataset.py 결과, FACTOR_DATE_END 까지)
       input/new_sites/번역결과.csv (있을 때만)
-출력  output/new_sites/추가관광지_리뷰데이터_1차전처리.csv
+출력  output/new_sites/추가관광지_리뷰데이터_1차전처리_요인기간.csv   요인 판정용 (FACTOR_DATE_END 까지)
+      output/new_sites/추가관광지_리뷰데이터_1차전처리.csv           그 가운데 DATE_END 까지 (나머지 분석용)
+      (전처리는 행마다 따로 하므로 DATE_END 까지의 행은 두 파일이 같다)
       output/new_sites/번역대상.csv (번역이 빠진 외국어 리뷰가 있을 때만)
 
 실행
@@ -72,8 +74,9 @@ def main():
     argparse.ArgumentParser(description=__doc__.split("\n")[0]).parse_args()
 
     ck = Checks("1차 전처리")
-    ck("통합 데이터 존재", config.DATASET.exists(), rel(config.DATASET))
-    df = read_csv(config.DATASET, dtype={"reviewId": str})
+    src = config.DATASET_FACTOR if config.DATASET_FACTOR.exists() else config.DATASET
+    ck("통합 데이터 존재", src.exists(), rel(src))
+    df = read_csv(src, dtype={"reviewId": str})
     n = len(df)
 
     # 1. 번역 — Claude Code 가 만든 input/new_sites/번역결과.csv 를 읽는다
@@ -124,8 +127,14 @@ def main():
     for c in cand[:30]:
         print(f"      {c['reviewId']} '{c['후보']}' … {c['문맥']}")
 
+    write_csv(df, config.PREPROCESSED_FACTOR)
+    print(f"\n저장: {rel(config.PREPROCESSED_FACTOR)}  {len(df)}행 · 본문 있는 리뷰 {after}  (요인 판정용)")
+    if config.DATE_END:
+        keep = d.dt.date <= pd.to_datetime(config.DATE_END).date()
+        df = df[keep.values]
     write_csv(df, config.PREPROCESSED)
-    print(f"\n저장: {rel(config.PREPROCESSED)}  {len(df)}행 · 본문 있는 리뷰 {after}")
+    print(f"저장: {rel(config.PREPROCESSED)}  {len(df)}행 · 본문 있는 리뷰 {int(df['body'].notna().sum())}  "
+          f"(분석 기간 ~ {config.DATE_END})")
 
 
 if __name__ == "__main__":
