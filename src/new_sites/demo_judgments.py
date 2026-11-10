@@ -87,7 +87,7 @@ def factor_annotations(rid0: dict[str, str]):
         if line.strip():
             a = json.loads(line)
             ann0[pend[a["i"]]] = a
-    d = pd.read_csv(config.PREPROCESSED, dtype=str, keep_default_na=False, encoding="utf-8-sig")
+    d = pd.read_csv(config.PREPROCESSED_FACTOR, dtype=str, keep_default_na=False, encoding="utf-8-sig")
     d = d[d["body"].str.strip() != ""]
     out, kept, dropped = [], 0, 0
     for rid, body in zip(d["reviewId"], d["body"]):

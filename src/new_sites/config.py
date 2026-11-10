@@ -71,6 +71,13 @@ DATE_END = "2025-12-31"  # 34개소 보고서의 분석 기간에 맞춘다 (202
                          # 감성 판정(run1·run2)과 사람 검토를 다시 한다. 요인 판정은 리뷰ID 로 이어 쓴다.
                          # None 이면 상한 없이 쓰고 경고를 낸다.
 
+# 요인 분석 기간의 끝날 — 34개소 보고서와 합쳐 만족·불만 요인과 관광지별 표를 낼 때 쓴다 (2026-11-10 결정).
+# 34개소 보고서는 요인·관광지별 집계에 2022년~2026년 8월 리뷰를 썼고 연도별·계절별 비교만 2022~2025년으로 했다.
+# 추가 2개소도 같게 맞추려고, 만족·불만 요인 판정만 이 날짜까지 넓힌다. 키워드·감성·연관 분석과
+# 추가관광지 보고서용 결과(리뷰별_만족불만요인_분석결과.csv)는 DATE_END 까지 그대로 쓴다.
+# None 이거나 DATE_END 보다 이르면 DATE_END 와 같게 본다.
+FACTOR_DATE_END = "2026-08-31"
+
 # 분석에 쓰는 플랫폼. 구글을 넣으면 output/collect/google/ 의 같은 이름 수집 파일도 읽는다.
 PLATFORMS = ["네이버"]
 
@@ -100,6 +107,9 @@ FACTOR_ANN = IN / "satisfaction" / "annotations.jsonl"      # 만족·불만 요
 OUT = DEMO_DIR / "new_sites" if DEMO else paths.NEW_OUT    # output/new_sites/
 DATASET = OUT / "추가관광지_리뷰데이터.csv"                   # 통합 원본 (비식별)
 PREPROCESSED = OUT / "추가관광지_리뷰데이터_1차전처리.csv"
+# 요인 분석 기간(FACTOR_DATE_END)까지의 같은 파일. DATE_END 까지의 행은 위 두 파일과 같다.
+DATASET_FACTOR = OUT / "추가관광지_리뷰데이터_요인기간.csv"
+PREPROCESSED_FACTOR = OUT / "추가관광지_리뷰데이터_1차전처리_요인기간.csv"
 TRANSLATE_TODO = OUT / "번역대상.csv"                       # 번역할 외국어 리뷰 (git 제외)
 OUT_KEYWORD = OUT / "keyword"
 KEYWORD_DATA = OUT_KEYWORD / "추가관광지_리뷰데이터_키워드전처리완료.csv"
@@ -141,3 +151,11 @@ ANALYSIS_STOPWORDS = {"좋다", "많다", "같다", "생각", "다녀오다", "�
 SENT_CHUNK = 150                 # 34개소 전수 적용 묶음 크기와 같다
 SENT_SEED = 20261102
 SENT_UNIT_PREFIX = "ADD"         # 문장 unit_id: ADD-00001 (check_output.py 정규식과 호환)
+
+
+def factor_end():
+    """요인 분석 기간의 끝날 — FACTOR_DATE_END 와 DATE_END 가운데 늦은 날."""
+    ends = [d for d in (DATE_END, FACTOR_DATE_END) if d]
+    if not DATE_END:
+        return None
+    return max(ends)
