@@ -141,7 +141,7 @@ python src/new_sites/run_all.py
 | 10 | `satisfaction.py export` | | `satisfaction/판정대상.jsonl`, `판정프롬프트.txt` (요인 분석 기간 2026-08-31까지) |
 | 11 | `satisfaction.py check` | `satisfaction/annotations.jsonl` | 형식·원문 대조·남은 리뷰 (출력 파일 없음) |
 | 12 | `satisfaction.py merge` | `satisfaction/annotations.jsonl` | 리뷰별 요인(34개소와 같은 열) — `리뷰별_만족불만요인_분석결과.csv`(~2025-12-31)와 `…_요인기간.csv`(~2026-08-31), 관광지별 집계·대표 원문·그림(~2025-12-31) |
-| 12-1 | `combined_report.py` | | `combined/` — 34개소와 합친 연도별·계절별(2022~2025년)·요인·관광지별(2022년~2026년 8월) 숫자와 그림 4개, `수치요약.md`. 요인은 리뷰 수(한 리뷰의 같은 요인은 1건)로 센다 |
+| 12-1 | `combined_report.py` | | `combined/` — 34개소와 합친 연도별·계절별(2022~2025년)·요인·관광지별(2022년~2026년 8월) 숫자와 그림 4개, `수치요약.md`. 34개소 요인은 기존 보고서와 같게 언급 수로, 추가 2개소 요인은 리뷰 수(한 리뷰의 같은 요인은 1건)로 센다 |
 | 13 | `summary.py` | | `summary/분석결과_요약.md`, `산출물_목록.csv` |
 
 ### 판정 파일이 지금 데이터와 어긋나지 않게 하는 장치

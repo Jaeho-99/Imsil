@@ -14,13 +14,15 @@
   그림 2-7 (요약본 그림 10)  연도별 수집 리뷰 수 · 만족도 분석 리뷰 수
         수집 = 행 수, 분석 = run_status 'ok' 이고 overall_sentiment 가 POS·NEU·NEG 인 행. 2022~2025년.
   그림 2-8 (요약본 그림 11)  연도별 긍정·중립·부정 리뷰 비율 — 분석 리뷰의 overall_sentiment. 2022~2025년.
-  그림 2-9 · 요약본 표 2      만족·불만 요인 상위 5개 — 요인을 만족(또는 불만)으로 언급한 리뷰 수. '대상외' 제외.
-  표 2-2 · 요약본 표 4        관광지별 분석 리뷰 수와 요인별 만족·불만 리뷰 수
+  그림 2-9 · 요약본 표 2      만족·불만 요인 상위 5개 — 만족(또는 불만) 요인 건수 (아래 '요인 세는 단위'). '대상외' 제외.
+  표 2-2 · 요약본 표 4        관광지별 분석 리뷰 수와 요인별 만족·불만 건수
 
-  요인은 리뷰 수로 센다 (2026-11-10 결정). 한 리뷰에서 같은 요인을 여러 번 언급해도 1건이다.
-  34개소 보고서 초안은 (요인, 극성) 언급 수로 셌다. 34개소 리뷰는 같은 요인을 거듭 언급하는 일이 드물어(리뷰당 0.04건)
-  두 방식의 차이가 작았지만, 오수의견국민여가캠핑장 리뷰는 길어서(본문 중앙값 250자, 34개소 21자) 리뷰당 1.4건이
-  거듭 언급되어 언급 수가 분석 리뷰 수보다 커졌다. 그래서 34개소를 포함한 전체를 리뷰 수로 다시 센다.
+  요인 세는 단위 (2026-11-10 결정)
+    34개소   보고서 초안 그대로 (요인, 극성) 언급 수로 센다. 34개소 숫자는 기존 보고서와 같아야 한다.
+    추가 2개소  리뷰 수로 센다. 한 리뷰에서 같은 요인을 여러 번 언급해도 1건이다. 오수의견국민여가캠핑장 리뷰는
+             길어서(본문 중앙값 250자, 34개소 21자) 같은 요인을 거듭 언급하는 일이 많아, 언급 수로 세면
+             요인 건수가 분석 리뷰 수보다 커진다. (34개소는 거듭 언급이 리뷰당 0.04건이라 두 방식 차이가 작다)
+    합계     34개소 언급 수 + 추가 2개소 리뷰 수.
   그림 2-10                  계절별 긍정·중립·부정 리뷰 비율 (봄 3~5월, 여름 6~8월, 가을 9~11월, 겨울 12~2월). 2022~2025년.
 
 기간
@@ -31,7 +33,7 @@
 
 재현 확인 (34개소만 셌을 때 보고서 초안과 같아야 하는 숫자 — 다르면 멈춘다. 입력 파일이 같은지 보는 검사다)
   수집 2022~2025년 1,192 · 1,817 · 1,238 · 730건, 분석 691 · 1,047 · 792 · 468건, 계절 합계 2,998건
-  언급 수로 셌을 때 만족 1위 경관·볼거리 1,044건, 불만 1위 자연·기상조건 240건
+  만족 1위 경관·볼거리 1,044건, 불만 1위 자연·기상조건 240건 (언급 수)
 
 입력  output/satisfaction/리뷰별_만족불만요인_분석결과.csv
       output/new_sites/satisfaction/리뷰별_만족불만요인_분석결과_요인기간.csv
@@ -116,9 +118,12 @@ def season_of(month: int) -> str:
     return SEASONS[(month % 12) // 3 - 1]   # 3~5 봄, 6~8 여름, 9~11 가을, 12~2 겨울
 
 
-def factor_rows(df: pd.DataFrame, per_review: bool = True) -> pd.DataFrame:
-    """factors_json 의 (요인, 극성) 한 쌍이 한 행. per_review 이면 한 리뷰의 같은 (요인, 극성)은 한 행만 남긴다
-    (= 리뷰 수). False 면 언급 수 (34개소 보고서 초안의 방식, 재현 확인에만 쓴다)."""
+PER_REVIEW_GROUPS = ("추가2개소",)   # 리뷰 수로 세는 구분. 34개소는 언급 수 (보고서 초안과 같게)
+
+
+def factor_rows(df: pd.DataFrame, per_review_groups=PER_REVIEW_GROUPS) -> pd.DataFrame:
+    """factors_json 의 (요인, 극성) 한 쌍이 한 행 (= 언급 수). per_review_groups 에 든 구분은
+    한 리뷰의 같은 (요인, 극성)을 한 행만 남긴다 (= 리뷰 수)."""
     rows = []
     for r in df[df["is_analyzed"]].itertuples():
         try:
@@ -129,9 +134,8 @@ def factor_rows(df: pd.DataFrame, per_review: bool = True) -> pd.DataFrame:
             rows.append({"group": r.group, "place": r.place, "reviewId": r.reviewId, "year": r.year,
                          "category": f.get("category"), "sentiment": f.get("sentiment")})
     out = pd.DataFrame(rows, columns=["group", "place", "reviewId", "year", "category", "sentiment"])
-    if per_review:
-        out = out.drop_duplicates(["group", "reviewId", "category", "sentiment"])
-    return out
+    dup = out.duplicated(["group", "reviewId", "category", "sentiment"]) & out["group"].isin(per_review_groups)
+    return out[~dup]
 
 
 def in_factor_period(df: pd.DataFrame) -> pd.DataFrame:
@@ -406,7 +410,7 @@ def main():
     ck("재현: 34개소 연도별 수집 리뷰", t34["수집리뷰"].to_dict() == EXPECT_34["collected"], f"{t34['수집리뷰'].to_dict()}")
     ck("재현: 34개소 연도별 분석 리뷰", t34["분석리뷰"].to_dict() == EXPECT_34["analyzed"], f"{t34['분석리뷰'].to_dict()}")
     if FACTOR_YEARS_34 is None:
-        m34 = factor_rows(an[an["group"] == "34개소"], per_review=False)
+        m34 = fr[fr["group"] == "34개소"]
         top_of = lambda code: m34[m34["sentiment"] == code]["category"].value_counts().head(1)  # noqa: E731
         got = tuple((t.index[0], int(t.iloc[0])) for t in (top_of("POS"), top_of("NEG")))
         ck("재현: 34개소 만족·불만 1위 (언급 수)", got == (EXPECT_34["pos_top"], EXPECT_34["neg_top"]), f"{got}")
